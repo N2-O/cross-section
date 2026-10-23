@@ -124,9 +124,9 @@ function renderGames() {
   const noMe = r => r.match_id && r.me_in === 0;
   const resOf = r => {
     if (noMe(r)) {
-      const tw = r.t_wins ?? 0, cw = r.ct_wins ?? 0;
-      const who = tw === cw ? '平' : (tw > cw ? 'T 方胜' : 'CT 方胜');
-      return `<span class="m" title="这场 demo 里没有你的 steamid（可能不是你打的，或你中途才进场）。本场 T ${tw} : CT ${cw}，${who}">无你</span>`;
+      const a = r.team_a_wins ?? 0, tot = r.rounds || 0, b = tot - a;
+      const who = a === b ? '平' : (a > b ? '先打 T 的队赢' : '先打 CT 的队赢');
+      return `<span class="m" title="这场 demo 里没有你的 steamid（可能不是你打的，或你中途才进场）。本场 ${a}:${b}，${who}">无你</span>`;
     }
     if (!hasRes(r)) return '—';
     const w = r.wins || 0, t = r.rounds;
@@ -139,9 +139,10 @@ function renderGames() {
     const w = r.wins || 0, t = r.rounds;
     const ot = t > 24 ? '<span class="ot">加时</span>' : '';
     if (noMe(r)) {
-      /* 没我的场：给客观比分——T 方回合 : CT 方回合（阵营视角，不冒充我的战绩） */
-      const tw = r.t_wins ?? 0, cw = r.ct_wins ?? 0;
-      return `<span class="m" title="这场 demo 里没有你的 steamid。比分是两边阵营赢下的回合数：T ${tw} : CT ${cw}">${tw}:${cw}</span>${ot}`;
+      /* 没我的场：给队伍口径的比分。A 队 = 上半场打 T 的那队；
+         不能用「T 阵营胜 : CT 阵营胜」求和，换边后那是两支不同的队。 */
+      const a = r.team_a_wins ?? 0, tot = r.rounds || 0, b = tot - a;
+      return `<span class="m" title="这场 demo 里没有你的 steamid。比分按队伍算：先打 T 的队 ${a} : 先打 CT 的队 ${b}">${a}:${b}</span>${ot}`;
     }
     return `${w}:${t - w}${ot}`;
   };

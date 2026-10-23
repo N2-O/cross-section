@@ -462,9 +462,16 @@ def list_demos(conn: sqlite3.Connection, my_steamid: int | None = None) -> list[
                   m.excluded, m.exclude_note,
                   (SELECT COUNT(*) FROM rounds r WHERE r.match_id=d.match_id) AS rounds,
                   (SELECT SUM(a_win) FROM rounds r WHERE r.match_id=d.match_id) AS wins,
-                  -- 客观比分（阵营视角）：这场没有我时也要能显示出「谁赢了多少回合」
-                  (SELECT SUM(winner='T') FROM rounds r WHERE r.match_id=d.match_id) AS t_wins,
-                  (SELECT SUM(winner='CT') FROM rounds r WHERE r.match_id=d.match_id) AS ct_wins,
+                  -- 客观比分（队伍视角，不是阵营视角）：A 队 = 上半场打 T 的那队。
+                  -- 上半场 T 胜 + 下半场 CT 胜 = A 队总回合；加时每 3 回合换边，延续下半场。
+                  -- 直接用「T 阵营胜场 : CT 阵营胜场」会算出 8:16 这种不存在的比分。
+                  (SELECT SUM(CASE WHEN
+                        (r.round <= 12 AND r.winner='T')
+                     OR (r.round BETWEEN 13 AND 24 AND r.winner='CT')
+                     OR (r.round >= 25 AND ((r.round-25)/3) % 2 = 0 AND r.winner='CT')
+                     OR (r.round >= 25 AND ((r.round-25)/3) % 2 = 1 AND r.winner='T')
+                     THEN 1 ELSE 0 END)
+                     FROM rounds r WHERE r.match_id=d.match_id) AS team_a_wins,
                   (SELECT first_side FROM players pl
                     WHERE pl.match_id=d.match_id
                       AND pl.steamid=COALESCE(:sid, m.my_steamid)) AS my_side,
