@@ -63,7 +63,85 @@ header nav a:hover{color:var(--ink)}
   max-width:5em;opacity:1;
   transition:max-width 340ms cubic-bezier(.22,.61,.36,1) 110ms,opacity 200ms linear 110ms;
 }
-.xb-alt{position:absolute;left:0;top:0;visibility:hidden;white-space:nowrap}
+/* 短路时才出现的那一层：内容 Counter-Strike，不是 CS2 / 也不是全名 */
+.xb-alt{position:absolute;left:0;top:0;visibility:hidden;
+  font-size:inherit;font-weight:inherit;letter-spacing:inherit;line-height:inherit;
+  color:inherit;white-space:nowrap;pointer-events:none}
+/* 短路：四个片段保留占位地消失，Counter-Strike 顶上原位 */
+.xb.glitch .xb-c,.xb.glitch .xb-m1,.xb.glitch .xb-s,.xb.glitch .xb-m2{visibility:hidden}
+/* 短路期间宽度锁在常态 CS 宽度：强行收起两个片段，只留 C/S 占位，不随 hover 变宽 */
+.xb.glitch .xb-m1,.xb.glitch .xb-m2{max-width:0;opacity:0;transition:none}
+.xb.glitch .xb-alt{visibility:visible;animation:xb-body 840ms linear both}
+.xb.glitch .xb-alt::before,.xb.glitch .xb-alt::after{content:"Counter-Strike";
+  position:absolute;left:0;top:0;white-space:nowrap;color:var(--ink)}
+.xb.glitch .xb-alt::before{animation:xb-tear-a 840ms steps(1,end) both}
+.xb.glitch .xb-alt::after{animation:xb-tear-b 840ms steps(1,end) both}
+/* 扫描线：1px 白线从上扫到下 */
+.xb.glitch::after{content:"";position:absolute;left:0;right:0;height:1px;top:0;
+  background:rgba(255,255,255,.18);pointer-events:none;
+  animation:xb-scan 840ms linear both}
+
+/* 本体：亮度/透明度闪断 + 轻微错位（不做虚化） */
+@keyframes xb-body{
+  0%{opacity:1;transform:translateX(0);filter:brightness(1)}
+  4%{opacity:.35;transform:translateX(-2px);filter:brightness(1.6)}
+  6%{opacity:1;transform:translateX(1px);filter:brightness(.7)}
+  9%{opacity:.6;transform:translateX(0);filter:brightness(1.3)}
+  14%{opacity:1;transform:translateX(2px);filter:brightness(1)}
+  22%{opacity:.28;transform:translateX(0);filter:brightness(1.9)}
+  30%{opacity:1;transform:translateX(-1px);filter:brightness(.85)}
+  46%{opacity:.75;transform:translateX(3px);filter:brightness(1.2)}
+  52%{opacity:1;transform:translateX(0);filter:brightness(1)}
+  58%{opacity:.42;transform:translateX(-3px);filter:brightness(1.5)}
+  74%{opacity:1;transform:translateX(1px);filter:brightness(.9)}
+  88%{opacity:.55;transform:translateX(0);filter:brightness(1.35)}
+  100%{opacity:1;transform:translateX(0);filter:brightness(1)}
+}
+/* 撕裂层 A：不同切片 + 不同横向错位 */
+@keyframes xb-tear-a{
+  0%{clip-path:inset(0 0 100% 0);transform:translateX(0);opacity:.9}
+  4%{clip-path:inset(12% 0 62% 0);transform:translateX(-6px)}
+  6%{clip-path:inset(0 0 100% 0);transform:translateX(0)}
+  9%{clip-path:inset(38% 0 44% 0);transform:translateX(7px)}
+  14%{clip-path:inset(0 0 100% 0);transform:translateX(0)}
+  22%{clip-path:inset(58% 0 20% 0);transform:translateX(-9px)}
+  30%{clip-path:inset(0 0 100% 0);transform:translateX(0);opacity:.7}
+  46%{clip-path:inset(24% 0 54% 0);transform:translateX(5px)}
+  52%{clip-path:inset(0 0 100% 0);transform:translateX(0)}
+  58%{clip-path:inset(70% 0 8% 0);transform:translateX(-4px)}
+  74%{clip-path:inset(0 0 100% 0);transform:translateX(0);opacity:1}
+  88%{clip-path:inset(44% 0 38% 0);transform:translateX(3px)}
+  100%{clip-path:inset(0 0 100% 0);transform:translateX(0)}
+}
+/* 撕裂层 B：与 A 互补的切片，制造整块错位 */
+@keyframes xb-tear-b{
+  0%{clip-path:inset(100% 0 0 0);transform:translateX(0);opacity:.8}
+  4%{clip-path:inset(62% 0 24% 0);transform:translateX(8px)}
+  6%{clip-path:inset(100% 0 0 0);transform:translateX(0)}
+  9%{clip-path:inset(0 0 76% 0);transform:translateX(-7px)}
+  14%{clip-path:inset(100% 0 0 0);transform:translateX(0);opacity:1}
+  22%{clip-path:inset(30% 0 52% 0);transform:translateX(11px)}
+  30%{clip-path:inset(100% 0 0 0);transform:translateX(0);opacity:.6}
+  46%{clip-path:inset(78% 0 6% 0);transform:translateX(-5px)}
+  52%{clip-path:inset(100% 0 0 0);transform:translateX(0)}
+  58%{clip-path:inset(16% 0 70% 0);transform:translateX(6px)}
+  74%{clip-path:inset(100% 0 0 0);transform:translateX(0);opacity:1}
+  88%{clip-path:inset(52% 0 30% 0);transform:translateX(-8px)}
+  100%{clip-path:inset(100% 0 0 0);transform:translateX(0)}
+}
+@keyframes xb-scan{
+  0%{top:0;opacity:0}
+  6%{opacity:.9}
+  46%{top:calc(50% - 1px);opacity:.7}
+  74%{opacity:.45}
+  100%{top:calc(100% - 1px);opacity:0}
+}
+@media (prefers-reduced-motion:reduce){
+  .xb-m1,.xb-m2{transition:none}
+  .xb.glitch .xb-alt,.xb.glitch .xb-alt::before,.xb.glitch .xb-alt::after,
+  .xb.glitch::after{animation:none}
+  .xb.glitch::after{opacity:0}
+}
 
 /* ---------- Hero ---------- */
 .hero{padding:104px 0 72px;display:grid;grid-template-columns:minmax(0,1fr) minmax(420px,.92fr);gap:72px;align-items:center}
@@ -526,21 +604,12 @@ footer .cols p{margin:0}
 <script>
 (function () {
   var xb = document.querySelector('.xb');
-  var alt = document.querySelector('.xb-alt');
-  if (!xb || !alt) return;
+  if (!xb) return;
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   function fire() {
     xb.classList.add('glitch');
-    alt.style.visibility = 'visible';
-    xb.querySelectorAll('.xb-c,.xb-m1,.xb-s,.xb-m2').forEach(function (e) {
-      e.style.visibility = 'hidden';
-    });
     setTimeout(function () {
       xb.classList.remove('glitch');
-      alt.style.visibility = 'hidden';
-      xb.querySelectorAll('.xb-c,.xb-m1,.xb-s,.xb-m2').forEach(function (e) {
-        e.style.visibility = '';
-      });
       setTimeout(fire, 14000 + Math.random() * 12000);
     }, 840);
   }
