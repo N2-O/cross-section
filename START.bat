@@ -27,6 +27,7 @@ REM ---- stop old instance still holding the port ----
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'python.exe' -or $_.Name -eq 'pythonw.exe') -and $_.CommandLine -like '*cs2tool*server.py*' } | ForEach-Object { Write-Host ('  kill old PID ' + $_.ProcessId); Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
 timeout /t 1 /nobreak >nul
 
-start "" http://127.0.0.1:8790/
+REM 浏览器由 server.py 自己打开——它知道实际绑定的端口（8790 被占用会自动换一个），
+REM 这里再 start 一次就会同时开两个标签页。
 "%PY%" cs2tool\server.py --port 8790
 pause

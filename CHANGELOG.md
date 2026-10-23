@@ -13,6 +13,7 @@
 - `settings.json` 固定在 `<安装根>/data/`（server 的 `BOOT_CFG`），不再跟着 `--data` 变——之前会造出「设置页填了、拉取说配置缺」
 - **demo 列表管理**：顶部按钮改为「全部重新解析」；每行可单独「重新解析」（只清该场回放缓存，不再清空整个缓存目录）或「移除」（只删分析结果与缓存，不动原始 `.dem`）
 - 新增 `cs2tool/check_pull.py`：抓取自检，把 HTTP 状态翻成具体原因
+- 启动只开一个页面：`START.bat` 里的 `start URL` 和 `server.py` 的自动打开各开一次，去掉 bat 里那次（server 知道实际端口）
 - 版本号 6.1 → 6.1.1（`server.py` / `about.html` / 导出 CSV 文件头 / 落地页）
 
 ## v6.1 — 2026-10-23
