@@ -128,10 +128,28 @@ section{position:relative;padding:88px 0;border-top:1px solid var(--line2)}
 .dl a:hover .go{color:var(--ink)}
 .dl-notes{font-size:14px;color:var(--dim);line-height:1.8}
 .disclaim{
-  margin:0 0 28px;padding:20px 22px;border-left:2px solid rgba(255,255,255,.2);
+  margin:0 0 28px;padding:22px 24px 20px;border-left:2px solid rgba(255,255,255,.2);
   background:rgba(255,255,255,.022);font-size:13.5px;line-height:1.9;color:var(--dim);
 }
-.disclaim strong{color:var(--ink);font-weight:600}
+.disclaim .dt{
+  margin:0 0 14px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--dimmer);
+}
+.disclaim ol{margin:0;padding:0;list-style:none;counter-reset:d}
+.disclaim li{
+  position:relative;padding-left:26px;margin-bottom:11px;
+}
+.disclaim li::before{
+  counter-increment:d;content:counter(d,decimal-leading-zero);
+  position:absolute;left:0;top:1px;font-size:11px;color:var(--dimmer);
+  font-variant-numeric:tabular-nums;letter-spacing:.04em;
+}
+.disclaim li:last-child{margin-bottom:0}
+.disclaim .df{
+  margin:16px 0 0;padding-top:14px;border-top:1px solid var(--line2);
+  font-size:12.5px;color:var(--dimmer);
+}
+.disclaim b{color:var(--ink);font-weight:600}
 .disclaim a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line)}
 .disclaim code{font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--dim)}
 
@@ -407,9 +425,17 @@ footer .cols p{margin:0}
       升级：有新版本时版本号旁边会亮一个 <code>NEW</code>，点它去发布页。下载新包解压覆盖安装目录，<strong>但保留你自己的 <code>data/</code> 和 <code>demos/</code></strong>——解压到新目录再把旧 <code>data/</code> 搬过去最稳。
     </p>
 
-    <p class="disclaim">
-      非官方工具，与 Valve Corporation 无任何关联、未获授权或背书。只读磁盘上的 <code>.dem</code>，不接触游戏进程、不注入、不提供任何游戏内优势，<strong>不是作弊工具</strong>；但<strong>不对任何账号状态作保证</strong>，风险自负。统计不保证与其他平台一致，仅供自我参考，不得用于赌博、投注、赛事裁决或职业选拔。<strong>下载或运行即视为接受 <a href="../../blob/main/DISCLAIMER.md">完整免责声明</a>。</strong>
-    </p>
+    <div class="disclaim">
+      <p class="dt">使用前须知</p>
+      <ol>
+        <li><b>非官方项目。</b>独立开发的第三方工具，与 Valve Corporation 无任何关联，未获其授权、赞助或背书。<code>Counter-Strike</code>、<code>CS2</code> 及相关标识为 Valve 的商标。</li>
+        <li><b>不接触游戏进程。</b>仅读取本地 <code>.dem</code> 录像文件并作离线统计；不读取游戏内存、不注入代码、不修改游戏文件、不模拟输入，不提供任何游戏内优势，不属于作弊工具。</li>
+        <li><b>不对账号状态作任何保证。</b>反作弊系统的策略与判定由第三方独立实施并可能随时变更，作者无法控制，使用者自行承担相关后果。</li>
+        <li><b>统计结果不保证准确。</b>不保证与 HLTV、Leetify 或任何平台的自有统计一致。结果仅供个人参考，不得用于赌博、投注、赛事裁决或职业选拔。</li>
+        <li><b>游戏素材版权归 Valve。</b><code>web/icons/</code> 与 <code>web/maps/</code> 内素材的著作权属 Valve Corporation，商业分发须自行取得授权。</li>
+      </ol>
+      <p class="df">下载、解压、运行即视为接受 <a href="../../blob/main/DISCLAIMER.md">完整条款</a>。</p>
+    </div>
 
     <div class="support">
       <div>
