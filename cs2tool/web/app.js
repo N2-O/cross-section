@@ -256,7 +256,7 @@ function renderPlayers() {
     { label: '只同场过 1 场', f: p => (p.matches || 0) < 2 },
   ];
   const one = p => `<option value="${p.steamid}"${p.is_me ? ' selected' : ''}>` +
-    `${esc(p.name || '（无名字）')}（${p.matches} 场）</option>`;
+    `${esc(p.name || '（无名字）')}（${p.excluded ? `${p.matches}/${p.matches + p.excluded}` : p.matches} 场）</option>`;
   const used = new Set();
   let html = '';
   for (const g of groups) {
@@ -370,7 +370,7 @@ function rTrend() {
     `<line x1="${PL}" y1="${Y(g).toFixed(1)}" x2="${W - PR}" y2="${Y(g).toFixed(1)}"
        stroke="rgba(255,255,255,.07)" stroke-width="1"/>
      <text x="${PL - 12}" y="${(Y(g) + 4).toFixed(1)}" text-anchor="end"
-       fill="#84848a" font-size="11" font-family="ui-monospace,monospace">${g.toFixed(fd)}</text>`).join('');
+       fill="#84848a" font-size="12" font-family="ui-monospace,monospace">${g.toFixed(fd)}</text>`).join('');
 
   const path = vals.map((v2, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(v2).toFixed(1)}`).join(' ');
   const area = `M${X(0).toFixed(1)},${(PT + ih).toFixed(1)} `
@@ -384,11 +384,11 @@ function rTrend() {
     return `<g>
       <circle cx="${X(i).toFixed(1)}" cy="${Y(v2).toFixed(1)}" r="3.8" fill="${c}"/>
       <text x="${X(i).toFixed(1)}" y="${(Y(v2) - 10).toFixed(1)}" text-anchor="middle"
-        fill="#d4d4d9" font-size="11.5" font-family="ui-monospace,monospace">${lab}</text>
+        fill="#d4d4d9" font-size="13" font-family="ui-monospace,monospace">${lab}</text>
       <text x="${X(i).toFixed(1)}" y="${H - 21}" text-anchor="middle"
-        fill="#9a9aa0" font-size="10.5">${esc(mapCn(x.map))}</text>
+        fill="#9a9aa0" font-size="12">${esc(mapCn(x.map))}</text>
       <text x="${X(i).toFixed(1)}" y="${H - 7}" text-anchor="middle"
-        fill="#5f5f66" font-size="9.5">${esc(x.score || '')}</text>
+        fill="#5f5f66" font-size="12">${esc(x.score || '')}</text>
       <title>${esc(mapCn(x.map))} ${esc(x.score || '')} · ${label} ${lab}</title>
     </g>`;
   }).join('');
@@ -544,9 +544,9 @@ function rClutch() {
   const totalMulti = (mk.mk2 || 0) + (mk.mk3 || 0) + (mk.mk4 || 0) + (mk.mk5 || 0);
   $('#mkLead').innerHTML = `
     <div style="display:flex;align-items:baseline;gap:12px">
-      <div style="font-size:46px;font-weight:650;line-height:1;letter-spacing:-.02em;
+      <div style="font-size: 46px;font-weight:650;line-height:1;letter-spacing:-.02em;
         font-variant-numeric:tabular-nums">${pct(mk.rate)}</div>
-      <div style="font-size:12.5px;color:var(--dim)">
+      <div style="font-size: 13px;color:var(--dim)">
         <span data-m="multi_rate">多杀回合率</span> · ${totalMulti} 个多杀回合 / ${S.overview.total.rounds} 回合
       </div>
     </div>`;
@@ -692,7 +692,7 @@ function rReason() {
         <text x="${C}" y="${C - 5}" text-anchor="middle" fill="#eee"
           font-size="34" font-weight="650" font-family="inherit">${total}</text>
         <text x="${C}" y="${C + 17}" text-anchor="middle" fill="#8a8a90"
-          font-size="11.5" font-family="inherit">回合</text>
+          font-size="13" font-family="inherit">回合</text>
       </svg>
     </div>
     <div class="legend">

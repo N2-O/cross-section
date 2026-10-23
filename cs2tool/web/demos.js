@@ -67,13 +67,19 @@ async function rPullLast() {
   let r = null;
   try { r = await api('/api/pull_result'); } catch (e) { return; }
   if (!r || r.ok === null || r.ok === undefined) { el.textContent = ''; return; }
-  if (r.ok) {
-    const n = r.added ?? 0;
-    el.textContent = `上次检查 ${r.time || ''}：${n ? `新增 ${n} 场，已生成 ${r.bat || '下载清单'}` : '没有新比赛'}`;
-    el.style.color = n ? 'var(--ok)' : '';
-  } else {
-    el.textContent = `上次检查 ${r.time || ''}：失败 — ${r.error || '未知错误'}`;
+  const t = r.t || r.time || '';
+  if (r.status === 'offline') {
+    el.textContent = `上次检查 ${t}：网络不通 —— ${r.error || '连不上 Steam API'}`;
     el.style.color = 'var(--bad)';
+  } else if (r.status === 'error' || r.ok === false) {
+    el.textContent = `上次检查 ${t}：查询失败 —— ${r.error || '未知错误'}`;
+    el.style.color = 'var(--bad)';
+  } else if (r.status === 'empty' || !(r.added)) {
+    el.textContent = `上次检查 ${t}：没有新比赛（已是最新的）`;
+    el.style.color = '';
+  } else {
+    el.textContent = `上次检查 ${t}：新增 ${r.added} 场，已生成 ${r.bat || '下载清单'}`;
+    el.style.color = 'var(--ok)';
   }
 }
 
@@ -83,9 +89,9 @@ function renderPlayers() {
   const ps = S.players || [];
   if (!ps.length) { sel.innerHTML = '<option>暂无玩家</option>'; return; }
   sel.innerHTML = ps.map(p =>
-    `<option value="${p.steamid}"${p.is_me ? ' selected' : ''}>${esc(p.name)}（${p.matches} 场）</option>`
+    `<option value="${p.steamid}"${p.is_me ? ' selected' : ''}>${esc(p.name)}（${p.excluded ? `${p.matches}/${p.matches + p.excluded}` : p.matches} 场）</option>`
   ).join('');
-  sel.title = `共 ${ps.length} 名玩家；括号里是参与的场次`;
+  sel.title = `共 ${ps.length} 名玩家；括号里是计入统计的场次 / 总场次`;
   sel.onchange = async e => {
     await post('/api/set_me', { steamid: Number(e.target.value) });
     load();
@@ -113,7 +119,11 @@ function renderGames() {
   /* demos[] 没有 st 子对象，统计字段直接挂在 r 上（me_kills / me_adr / ...）。
      比分 = 我方赢的回合 : 输的回合；加时局（>24 回合）单独标出来。 */
   const hasRes = r => (r.rounds || 0) > 0;
+  /* 这场 demo 里没有我（不是我打的 / 我中途才进场）：不能把我的队算成 T 方，
+     结果列直接写「无你」，不然会显示一个跟我无关的胜负。 */
+  const noMe = r => r.match_id && r.me_in === 0;
   const resOf = r => {
+    if (noMe(r)) return '<span class="m" title="这场 demo 里没有你的 steamid：可能不是你打的，或你中途才进场">无你</span>';
     if (!hasRes(r)) return '—';
     const w = r.wins || 0, t = r.rounds;
     if (w * 2 > t) return '<span class="w">胜</span>';
@@ -121,6 +131,7 @@ function renderGames() {
     return '<span class="l">负</span>';
   };
   const scoreOf = r => {
+    if (noMe(r)) return '—';
     if (!hasRes(r)) return '—';
     const w = r.wins || 0, t = r.rounds;
     const ot = t > 24 ? '<span class="ot">加时</span>' : '';
@@ -153,10 +164,14 @@ function renderGames() {
         ? Math.round(r.me_stop / r.me_fire * 100) + '%' : '—' },
     { t: '首杀', num: 1, get: r => r.me_fk ?? '—' },
     { t: '', num: 1, get: r => {
-        if (r.error) return `<span class="l" title="${esc(r.error)}">失败</span>`;
-        if (!r.analyzed) return `<button data-analyze="${esc(r.name)}">分析</button>`;
-        return `<span class="op"><a href="/replay.html?m=${r.match_id}">回放 →</a></span>`;
-      } },
+        // 行内三个操作：看回放 / 只重解析这一场 / 从列表移除
+        const nm = esc(r.name);
+        const tail = `<button class="mini" data-reparse="${nm}" title="只重新解析这一场（约 8 秒）">⟲</button>` +
+                     `<button class="mini del" data-del="${nm}" title="从列表移除这场（只删分析结果，原始 .dem 文件不动）">✕</button>`;
+        if (r.error) return `<span class="op"><span class="l" title="${esc(r.error)}">失败</span>${tail}</span>`;
+        if (!r.analyzed) return `<span class="op"><button data-analyze="${nm}">分析</button>${tail}</span>`;
+        return `<span class="op"><a href="/replay.html?m=${r.match_id}" title="看这场回放">回放 →</a>${tail}</span>`;
+    } },
   ], rows);
 
   $$('#gameTable button[data-analyze]').forEach(b => {
@@ -165,6 +180,30 @@ function renderGames() {
       hint(`分析 ${nm}…`);
       const r = await post('/api/analyze', { names: [nm] });
       if (r.ok) pollJob(); else hint(r.error || '失败');
+    };
+  });
+
+  /* 单场重新解析：只清这一场的回放缓存，其他场不受影响 */
+  $$('#gameTable button[data-reparse]').forEach(b => {
+    b.onclick = async () => {
+      const nm = b.dataset.reparse;
+      hint(`重新解析 ${nm}…`);
+      const r = await post('/api/reparse', { names: [nm] });
+      if (r.ok) pollJob('已重新解析这一场');
+      else hint(r.error || '失败', false);
+    };
+  });
+
+  /* 单场移除：删库里的分析结果 + 回放缓存，原始 .dem 文件不动 */
+  $$('#gameTable button[data-del]').forEach(b => {
+    b.onclick = async () => {
+      const nm = b.dataset.del;
+      if (!confirm(`从列表移除这一场？\n\n${nm}\n\n` +
+                   '只删工具里的分析结果和回放缓存；demos 目录里的原始 .dem 文件不动。\n' +
+                   '（下次点「扫描目录」它会以「未分析」的身份回来）')) return;
+      const r = await post('/api/delete_demo', { name: nm });
+      if (r.ok) { hint(r.msg || '已移除', true); load(); }
+      else hint(r.error || '失败', false);
     };
   });
 }
@@ -230,9 +269,17 @@ $('#btnPullNew').onclick = async () => {
     hint(`需要先配置：${miss}　→ 回主页点右上角「⚙ 设置」`, false);
     return;
   }
-  if (!pv.ok) { hint(pv.error || '查询失败', false); return; }
+  // 四种结果分开说：网络不通 / 查询失败 / 确实没有新的 / 有 N 场
+  if (pv.status === 'offline') {
+    hint(`网络不通：${pv.error || '连不上 Steam API（直连和代理都试过）'}`, false);
+    return;
+  }
+  if (pv.status === 'error' || !pv.ok) {
+    hint(`查询失败：${pv.error || '未知原因'}`, false);
+    return;
+  }
   if (!pv.count) {
-    hint('没有新比赛' + (pv.error ? `（${pv.error}）` : ''), true);
+    hint('没有新比赛（已是最新的）', true);
     return;
   }
 

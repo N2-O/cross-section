@@ -6,55 +6,62 @@
   padding:12px max(20px,calc((100vw - 1760px)/2));
   border-bottom:1px solid var(--line);background:var(--bg);
   position:sticky;top:0;z-index:5}
-#dnav h1{font-size:16px;margin:0;font-weight:650}
-#dnav a{font-size:12.5px;color:var(--dim)}
+#dnav h1{font-size: 18px;margin:0;font-weight:650}
+#dnav a{font-size: 13px;color:var(--dim)}
 #dnav a:hover{color:var(--txt)}
 /* ===== 分节：和主页一致的大标题层级 ===== */
 .wrap{counter-reset:sec}
 .sec{counter-increment:sec;position:relative;margin-bottom:48px;padding-top:6px}
 .sec>h2{display:flex;align-items:center;gap:14px;position:relative;
-  font-size:23px;font-weight:600;letter-spacing:-.015em;color:var(--txt);
+  font-size: 24px;font-weight:600;letter-spacing:-.015em;color:var(--txt);
   text-transform:none;margin:0 0 18px;line-height:1.2}
 .sec>h2::before{content:counter(sec,decimal-leading-zero);
   position:absolute;left:-30px;top:50%;transform:translateY(-50%);
-  font-size:19px;font-weight:600;color:var(--acc);opacity:.5;
+  font-size: 18px;font-weight:600;color:var(--acc);opacity:.5;
   font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1;
   pointer-events:none}
 .sec>h2::after{content:'';order:1;flex:1;height:1px;min-width:24px;
   background:linear-gradient(to right,rgba(255,255,255,.13),rgba(255,255,255,0))}
-.sec>h2 .r{order:2;flex:none;font-size:12px;font-weight:400;color:var(--dim);
+.sec>h2 .r{order:2;flex:none;font-size: 13px;font-weight:400;color:var(--dim);
   letter-spacing:0;text-transform:none}
 /* 表：地图列带文件小字 */
 .gmap{line-height:1.25}
-.gmap .mn{font-size:13px}
-.gmap .fs{font-size:10.5px;color:var(--dim);opacity:.7;margin-top:1px}
-.tb .op a,.tb .op button{font-size:12px;padding:0}
+.gmap .mn{font-size: 13px}
+.gmap .fs{font-size: 12px;color:var(--dim);opacity:.7;margin-top:1px}
+.tb .op a,.tb .op button{font-size: 13px;padding:0}
+/* 行内操作：回放 / 重解析 / 移除，三个并排，删除 hover 才变红 */
+.tb .op{display:inline-flex;align-items:center;gap:10px;white-space:nowrap}
+.tb .op .mini{border:0;background:none;color:var(--dim);cursor:pointer;
+  font-size: 13px;line-height:1;padding:2px 0}
+.tb .op .mini:hover{color:var(--txt)}
+.tb .op .mini.del{font-size: 14px}
+.tb .op .mini.del:hover{color:var(--bad)}
 /* 危险操作：推到最右，红色描边，hover 反白 */
 #btnResetAll{margin-left:auto;color:var(--bad);border-color:#3a2222}
 #btnResetAll:hover{background:rgba(255,107,107,.14);border-color:var(--bad);color:#fff}
 /* 页脚声明 */
 #foot{margin-top:64px;padding:20px 0 8px;border-top:1px solid rgba(255,255,255,.05);
   text-align:center}
-#foot .fline{font-size:10.5px;color:var(--dim);opacity:.55;display:flex;gap:8px;
+#foot .fline{font-size: 12px;color:var(--dim);opacity:.55;display:flex;gap:8px;
   align-items:center;justify-content:center;flex-wrap:wrap}
-#foot a{color:var(--dim);font-size:10.5px}
+#foot a{color:var(--dim);font-size: 12px}
 #foot a:hover{color:var(--txt);opacity:1}
 #foot .sep{opacity:.4}
-#foot .fdis{margin:12px auto 0;max-width:860px;font-size:11px;line-height:1.9;
+#foot .fdis{margin:12px auto 0;max-width:860px;font-size: 12px;line-height:1.9;
   color:var(--dim);opacity:.62;letter-spacing:.01em}
 #foot .fdis span{display:block}
 #foot .fdis span+span{margin-top:2px}
-#foot .fdis code{font-size:10.5px;background:none;padding:0}
-.tb{width:100%;border-collapse:collapse;font-size:12.5px}
-.tb th{text-align:left;font-weight:500;color:var(--dim);font-size:11px;
+#foot .fdis code{font-size: 12px;background:none;padding:0}
+.tb{width:100%;border-collapse:collapse;font-size: 13px}
+.tb th{text-align:left;font-weight:500;color:var(--dim);font-size: 12px;
   padding:7px 9px;border-bottom:1px solid var(--line);white-space:nowrap}
 .tb td{padding:7px 9px;border-bottom:1px solid rgba(255,255,255,.045)}
 .tb tr:last-child td{border-bottom:0}
 .tb tr:hover td{background:rgba(255,255,255,.028)}
 .tb .num{text-align:right;font-variant-numeric:tabular-nums;font-family:inherit}
 .tb .w{color:var(--ok)}.tb .l{color:var(--bad)}.tb .d{color:var(--dim)}.tb .m{color:var(--dim)}
-.tb .ot{font-size:9.5px;color:var(--warn,#d8a83c);margin-left:5px;letter-spacing:.04em}
-.nil{color:var(--dim);font-size:12.5px;padding:18px 0;text-align:center}
+.tb .ot{font-size: 12px;color:var(--warn,#d8a83c);margin-left:5px;letter-spacing:.04em}
+.nil{color:var(--dim);font-size: 13px;padding:18px 0;text-align:center}
 .mbtr{width:70px;background:rgba(255,255,255,.07);border-radius:3px;display:inline-block;
   height:5px;vertical-align:middle;overflow:hidden}
 .mb{display:inline-block;height:5px;border-radius:3px;background:var(--acc);opacity:.5;
@@ -83,7 +90,7 @@
         <button id="btnPullNew" title="按 Steam 账号设置，从比赛历史里找还没下载的对局">⇣ 从 Steam 拉新比赛</button>
         <button id="btnScan">扫描目录</button>
         <button id="btnAnalyze">分析未处理</button>
-        <button id="btnReparse">⟲ 重新解析</button>
+        <button id="btnReparse" title="把所有 demo 从头重新解析一遍（清空现有分析结果）">⟲ 全部重新解析</button>
         <button id="btnExportCsv">导出完整 CSV</button>
         <button id="btnResetAll" title="清空所有分析数据、缓存、导出和设置（demo 原始文件不删）">⌫ 全部删除</button>
       </div>
@@ -92,16 +99,16 @@
         <div style="height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden">
           <i id="pullFill" style="display:block;height:100%;width:0;background:var(--tint);transition:width .35s ease"></i>
         </div>
-        <div class="muted" id="pullMsg" style="font-size:11.5px;margin-top:6px"></div>
+        <div class="muted" id="pullMsg" style="font-size: 12px;margin-top:6px"></div>
       </div>
-      <div class="muted" id="pullLast" style="font-size:11.5px;margin-top:10px"></div>
+      <div class="muted" id="pullLast" style="font-size: 12px;margin-top:10px"></div>
     </div></div>
   </div>
 
   <div class="sec">
     <h2>对局 <span class="r" id="gameSub"></span></h2>
     <div class="card"><div class="bd np">
-      <div class="muted" id="demoPath" style="padding:10px 16px;font-size:11.5px;
+      <div class="muted" id="demoPath" style="padding:10px 16px;font-size: 12px;
         border-bottom:1px solid var(--line)"></div>
       <div id="gameTable"></div>
     </div></div>

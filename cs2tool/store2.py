@@ -448,7 +448,14 @@ def scan_demos(conn: sqlite3.Connection, demo_dir: str, my_steamid=None) -> dict
             "total": total, "analyzed": done}
 
 
-def list_demos(conn: sqlite3.Connection) -> list[dict]:
+def list_demos(conn: sqlite3.Connection, my_steamid: int | None = None) -> list[dict]:
+    """demos 列表 + 每场「我」的数据。
+
+    my_steamid 由调用方传「当前看谁」（server._me 的结果）。不能直接拿
+    matches.my_steamid 做 JOIN —— 那是每场解析时落的快照，历史脏值（真实案例：
+    25 场全写成 ...970，而 pms 里根本没有这个号）会让整张表的 K/D/ADR 全空，
+    和概览（走 settings）自相矛盾。传 None 时退回库里的值，兼容旧调用。
+    """
     rows = conn.execute(
         """SELECT d.*, m.map AS m_map, m.platform AS m_platform,
                   m.duration_s, m.played_at, m.my_steamid,
@@ -456,7 +463,10 @@ def list_demos(conn: sqlite3.Connection) -> list[dict]:
                   (SELECT COUNT(*) FROM rounds r WHERE r.match_id=d.match_id) AS rounds,
                   (SELECT SUM(a_win) FROM rounds r WHERE r.match_id=d.match_id) AS wins,
                   (SELECT first_side FROM players pl
-                    WHERE pl.match_id=d.match_id AND pl.steamid=m.my_steamid) AS my_side,
+                    WHERE pl.match_id=d.match_id
+                      AND pl.steamid=COALESCE(:sid, m.my_steamid)) AS my_side,
+                  (SELECT COUNT(*) FROM pms p2 WHERE p2.match_id=d.match_id
+                      AND p2.steamid=COALESCE(:sid, m.my_steamid)) AS me_in,
                   p.kills AS me_kills, p.deaths AS me_deaths, p.assists AS me_assists,
                   p.adr AS me_adr, p.kast AS me_kast, p.rating AS me_rating,
                   p.hs AS me_hs, p.fk AS me_fk, p.impact AS me_impact,
@@ -466,8 +476,9 @@ def list_demos(conn: sqlite3.Connection) -> list[dict]:
            FROM demos d
            LEFT JOIN matches m ON m.id = d.match_id
            LEFT JOIN pms p ON p.match_id = d.match_id
-                          AND p.steamid = (SELECT my_steamid FROM matches WHERE id=d.match_id)
-           ORDER BY COALESCE(d.mtime,'') DESC, d.name"""
+                          AND p.steamid = COALESCE(:sid, m.my_steamid)
+           ORDER BY COALESCE(d.mtime,'') DESC, d.name""",
+        {"sid": my_steamid},
     ).fetchall()
     out = []
     for r in rows:

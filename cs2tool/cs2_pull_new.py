@@ -22,10 +22,22 @@ import urllib.request
 
 SELF = os.path.abspath(__file__)
 ROOT = os.path.dirname(os.path.dirname(SELF))          # cs2tool/ 的上一级 = 安装根
+# 注意两条路径不是一回事：
+#   · settings.json 固定在 <安装根>/data/settings.json —— server.py 里叫 BOOT_CFG，
+#     是引导位置，**不随 --data 变化**（--data 只换数据库/产物所在目录）。
+#   · pull_last / pull_progress / pull_preview 是运行产物，跟着 --data 走，
+#     这样 server 的 DATA_DIR 指向别处时，前端仍能读到进度和结果。
+# 之前把两者混成一个，settings 跟着 --data 跑 → 「设置页明明填了，拉取说配置缺」。
+DATA = os.path.join(ROOT, "data")
+if "--data" in sys.argv:
+    try:
+        DATA = os.path.abspath(sys.argv[sys.argv.index("--data") + 1])
+    except IndexError:
+        pass
 SETTINGS = os.path.join(ROOT, "data", "settings.json")
 BAT = os.path.join(ROOT, "cs2_new_download.bat")
-RESULT = os.path.join(ROOT, "data", "pull_last.json")
-PROGRESS = os.path.join(ROOT, "data", "pull_progress.json")
+RESULT = os.path.join(DATA, "pull_last.json")
+PROGRESS = os.path.join(DATA, "pull_progress.json")
 API = "https://api.steampowered.com/ICSGOPlayers_730/GetNextMatchSharingCode/v1/"
 
 DRY = "--dry-run" in sys.argv
@@ -77,34 +89,75 @@ def main() -> int:
         progress(state="error", error="设置缺 " + ", ".join(missing))
         return 1
 
-    # 网络：默认走系统代理；第一次失败就永久切直连（连不上就当没有）
-    state = {"op": urllib.request.build_opener(), "mode": "系统代理"}
+    # 网络：直连优先（Steam API 在国内通常直连比代理稳），不通再退回系统代理/Clash。
+    # 旧版是「先系统代理」——这台机器上代理一慢就整个查询超时，表现成「抓不到新比赛」。
     DIRECT = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        PROXY = urllib.request.build_opener()
+    except Exception:
+        PROXY = DIRECT
+    state = {"mode": "直连"}
 
     def next_code(known):
         q = urllib.parse.urlencode({"key": key, "steamid": sid,
                                     "steamidkey": auth, "knowncode": known})
-        for attempt in (0, 1):
+        last = ""
+        for label, op in ORDER:      # 顺序由 probe 的结果决定，见下方 ORDER
+            for _ in range(2):          # 单次抽风不放弃整轮
+                try:
+                    with op.open(API + "?" + q, timeout=15) as r:
+                        state["mode"] = label
+                        return json.loads(r.read()).get("result", {}).get("nextcode")
+                except urllib.error.HTTPError as e:
+                    if e.code == 202:
+                        return "n/a"          # 没有更新的比赛了
+                    if e.code in (401, 403):
+                        return "err:认证不过（api key / auth_code / steamid 不是同一套）"
+                    if e.code == 503:
+                        return "err:调用过频，等 10 分钟再试"
+                    last = f"HTTP {e.code}"
+                    break
+                except Exception as e:
+                    last = type(e).__name__
+                    time.sleep(1.2)
+        return f"err:{last or '未知'}"
+
+    # ---- 连通性探测：先确认能不能连上 Steam，不通就明确报「网络不通」。
+    # 不能和「没有新比赛」混成一个结果——查询超时和真没新局是完全不同的两件事，
+    # 之前一律显示「没有新比赛」，会让人以为账号/配置没问题。
+    PROBE = "https://api.steampowered.com/ISteamWebAPIUtil/GetServerInfo/v1/"
+
+    def probe():
+        last = "未知"
+        for label, op in (("直连", DIRECT), ("系统代理", PROXY)):
             try:
-                with state["op"].open(API + "?" + q, timeout=20) as r:
-                    return json.loads(r.read()).get("result", {}).get("nextcode")
+                with op.open(PROBE, timeout=8) as r:
+                    if 200 <= r.status < 300:
+                        return label, None
+                    last = f"HTTP {r.status}"
             except urllib.error.HTTPError as e:
-                if e.code == 202:
-                    return "n/a"          # 没有更新的比赛了
-                if e.code in (403, 503):
-                    return "err:认证码无效或调用过频"
-                return f"err:HTTP {e.code}"
+                last = f"HTTP {e.code}"
             except Exception as e:
-                if attempt == 0 and state["mode"] == "系统代理":
-                    log(f"[WARN] {state['mode']}不通（{type(e).__name__}），改直连重试")
-                    state["op"] = DIRECT
-                    state["mode"] = "直连"
-                    continue
-                return f"err:{type(e).__name__}"
-        return "err:未知"
+                last = f"{label}:{type(e).__name__}"
+        return None, last
+
+    net, neterr = probe()
+    if not net:
+        msg = f"网络不通：连不上 api.steampowered.com（直连和系统代理都试过，最后错误 {neterr}）"
+        log(f"[ERROR] {msg}")
+        progress(state="error", phase="network", error=msg)
+        write_json(os.path.join(DATA, "pull_preview.json"),
+                   {"t": time.strftime("%Y-%m-%d %H:%M:%S"), "status": "offline",
+                    "count": 0, "codes": [], "start_code": start, "error": msg})
+        return 2
 
     progress(state="running", done=0, total=0, current=start,
              mode="dry" if DRY else "pull", msg="正在查询新比赛…")
+
+    # 探测到哪个模式通，就优先用它——不然每场都要先撞一次不通的（实测能拖到 70 秒+）
+    ORDER = [("直连", DIRECT), ("系统代理", PROXY)]
+    if net == "系统代理":
+        ORDER.reverse()
 
     code = start
     new = []
@@ -129,19 +182,32 @@ def main() -> int:
 
     if DRY:
         # 只报告，不写 bat、不动 start_code
-        progress(state="done", done=len(new), total=len(new), mode="dry",
-                 msg=f"共 {len(new)} 场" + (f"（{err}）" if err else ""))
-        write_json(os.path.join(ROOT, "data", "pull_preview.json"),
-                   {"t": time.strftime("%Y-%m-%d %H:%M:%S"),
+        status = "error" if err else ("ok" if new else "empty")
+        if status == "error":
+            progress(state="error", error=f"查询失败：{err}")
+        else:
+            progress(state="done", done=len(new), total=len(new), mode="dry",
+                     msg=(f"共 {len(new)} 场" if new else "没有新比赛（已是最新的）"))
+        write_json(os.path.join(DATA, "pull_preview.json"),
+                   {"t": time.strftime("%Y-%m-%d %H:%M:%S"), "status": status,
                     "count": len(new), "codes": new, "start_code": start,
-                    "error": err})
-        return 0
+                    "error": err, "net": net})
+        return 1 if status == "error" else 0
 
     if not new:
-        progress(state="done", done=0, total=0, mode="pull", msg="没有新比赛")
+        if err:
+            # 查询本身失败了 —— 这跟「确实没有新比赛」必须区分开
+            msg = f"拉取失败：{err}"
+            log(f"[ERROR] {msg}")
+            progress(state="error", phase="query", error=msg)
+            write_json(RESULT, {"t": time.strftime("%Y-%m-%d %H:%M:%S"), "ok": False,
+                                "status": "error", "added": 0, "codes": [], "bat": "",
+                                "start_code": start, "error": err, "msg": msg})
+            return 1
+        progress(state="done", done=0, total=0, mode="pull", msg="没有新比赛（已是最新的）")
         write_json(RESULT, {"t": time.strftime("%Y-%m-%d %H:%M:%S"), "ok": True,
-                            "added": 0, "codes": [], "bat": "",
-                            "start_code": start, "msg": "没有新比赛"})
+                            "status": "empty", "added": 0, "codes": [], "bat": "",
+                            "start_code": start, "msg": "没有新比赛（已是最新的）"})
         return 0
 
     lines = [
@@ -167,11 +233,14 @@ def main() -> int:
     log(f"start_code 已推进到: {code}")
 
     write_json(RESULT, {"t": time.strftime("%Y-%m-%d %H:%M:%S"), "ok": True,
-                        "added": len(new), "codes": new,
+                        "status": "ok", "added": len(new), "codes": new,
                         "bat": os.path.basename(BAT), "start_code": code,
-                        "msg": f"新增 {len(new)} 场，已生成 {os.path.basename(BAT)}"})
+                        "warning": err or None,
+                        "msg": f"新增 {len(new)} 场，已生成 {os.path.basename(BAT)}"
+                               + (f"（查到第 {len(new)+1} 场时出错：{err}）" if err else "")})
     progress(state="done", done=len(new), total=len(new), mode="pull",
-             msg=f"新增 {len(new)} 场，清单已生成")
+             msg=f"新增 {len(new)} 场，清单已生成"
+                 + (f"；中途出错：{err}" if err else ""))
     return 0
 
 

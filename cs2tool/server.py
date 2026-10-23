@@ -21,7 +21,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
 
-VERSION = "6.1"
+VERSION = "6.1.1"
 # 开源发布仓库（检查新版本用）
 REPO_SLUG = "N2-O/cross-section"
 RELEASES_URL = f"https://github.com/{REPO_SLUG}/releases"
@@ -269,8 +269,8 @@ def _detect_cs2():
 
 def api_state():
     with _lock:
-        demos = store2.list_demos(_conn)
         me = _me(_conn)
+        demos = store2.list_demos(_conn, me)
         players = stats_api.player_list(_conn)
         ov = stats_api.overview(_conn, me) if me else {"empty": True}
         if me:
@@ -830,21 +830,55 @@ class Handler(BaseHTTPRequestHandler):
                             "WHERE analyzed=0 OR match_id IS NULL ORDER BY id")]
                 return self._send(*_json(api_analyze(names)))
             if u.path == "/api/reparse":
-                # 强制重新解析：默认全部 demo；可传 names 只重解析指定文件
+                # 强制重新解析：不传 names = 全部；传了 = 只重解析这几场
                 names = payload.get("names")
+                single = bool(names)
                 if not names:
                     names = [r["name"] for r in
                              _conn.execute("SELECT name FROM demos").fetchall()]
                 if not names:
                     return self._send(*_json({"ok": False, "error": "demo 列表为空"}))
-                # 旧回放缓存基于旧数据，必须先清
-                for f in os.listdir(REPLAY_DIR):
-                    if f.endswith(".json"):
+                # 旧回放缓存基于旧数据，必须先清。单场重解析只清那一场的缓存——
+                # 不然重解一场会把其他场几 MB 的缓存一起废掉。
+                if single:
+                    for nm in names:
+                        row = _conn.execute("SELECT match_id FROM demos WHERE name=?",
+                                            (nm,)).fetchone()
+                        if row and row["match_id"]:
+                            try:
+                                os.remove(os.path.join(REPLAY_DIR, f"{int(row['match_id'])}.json"))
+                            except OSError:
+                                pass
+                else:
+                    for f in os.listdir(REPLAY_DIR):
+                        if f.endswith(".json"):
+                            try:
+                                os.remove(os.path.join(REPLAY_DIR, f))
+                            except OSError:
+                                pass
+                return self._send(*_json(api_analyze(names, force=True)))
+            if u.path == "/api/delete_demo":
+                # 单场移除：只删库里的分析结果 + 回放缓存，**不动原始 .dem 文件**
+                # （删文件不可恢复；要真删文件，去 demos 目录自己删）
+                nm = str(payload.get("name") or "").strip()
+                if not nm:
+                    return self._send(*_json({"ok": False, "error": "缺少 name"}))
+                with _lock:
+                    row = _conn.execute("SELECT match_id FROM demos WHERE name=?",
+                                        (nm,)).fetchone()
+                    if not row:
+                        return self._send(*_json({"ok": False, "error": f"列表里没有 {nm}"}))
+                    mid = row["match_id"]
+                    if mid:
+                        store2.delete_match(_conn, int(mid))
                         try:
-                            os.remove(os.path.join(REPLAY_DIR, f))
+                            os.remove(os.path.join(REPLAY_DIR, f"{int(mid)}.json"))
                         except OSError:
                             pass
-                return self._send(*_json(api_analyze(names, force=True)))
+                    _conn.execute("DELETE FROM demos WHERE name=?", (nm,))
+                    _conn.commit()
+                return self._send(*_json({"ok": True, "name": nm,
+                                          "msg": f"已移除 {nm}（原始 .dem 文件没删）"}))
             if u.path == "/api/reset_all":
                 return self._send(*_json(api_reset_all()))
             if u.path == "/api/clear_cache":
@@ -975,7 +1009,7 @@ class Handler(BaseHTTPRequestHandler):
                     else:
                         _kw["start_new_session"] = True
                     _logf = open(os.path.join(DATA_DIR, "pull.log"), "a", encoding="utf-8")
-                    subprocess.Popen([sys.executable, script],
+                    subprocess.Popen([sys.executable, script, "--data", DATA_DIR],
                                      cwd=os.path.dirname(script),
                                      stdout=_logf, stderr=subprocess.STDOUT,
                                      **_kw)
@@ -999,18 +1033,23 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(*_json({"ok": False, "error": "找不到 cs2_pull_new.py"}))
                 try:
                     _r = subprocess.run(
-                        [sys.executable, script, "--dry-run", "--limit", "30"],
+                        [sys.executable, script, "--dry-run", "--limit", "30",
+                         "--data", DATA_DIR],
                         cwd=os.path.dirname(script), capture_output=True,
                         text=True, timeout=150)
                 except subprocess.TimeoutExpired:
-                    return self._send(*_json({"ok": False, "error": "查询超时（网络太慢）"}))
+                    return self._send(*_json({"ok": False, "status": "error",
+                                              "error": "查询超时：脚本 150 秒没回来（网络太慢）"}))
                 _pf = os.path.join(DATA_DIR, "pull_preview.json")
                 try:
                     with open(_pf, encoding="utf-8") as _f:
                         _pv = json.load(_f)
                 except Exception:
-                    return self._send(*_json({"ok": False, "error": (_r.stderr or _r.stdout or "查询失败")[-300:]}))
-                _pv["ok"] = True
+                    return self._send(*_json({"ok": False, "status": "error",
+                                              "error": (_r.stderr or _r.stdout or "查询失败")[-300:]}))
+                # status: ok=有新比赛 / empty=一条都没新（正常）/ error=查询失败 /
+                # offline=连不上 Steam。后两个不能伪装成「没有新比赛」。
+                _pv["ok"] = _pv.get("status") not in ("error", "offline")
                 return self._send(*_json(_pv))
             if u.path == "/api/set_excluded":
                 # 标记/取消标记「这局不算数」：投降、摆烂、半路不打了。
@@ -1150,7 +1189,7 @@ def _auto_pull_loop():
                 continue
             script = os.path.join(HERE, "cs2_pull_new.py")
             if os.path.isfile(script):
-                subprocess.run([sys.executable, script], cwd=HERE,
+                subprocess.run([sys.executable, script, "--data", DATA_DIR], cwd=HERE,
                                timeout=300, capture_output=True)
             _t.sleep(max(600, hours * 3600))
         except Exception:

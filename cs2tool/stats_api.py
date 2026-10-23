@@ -1140,7 +1140,15 @@ def player_list(conn: sqlite3.Connection, min_matches: int | None = None) -> lis
                     WHERE p2.steamid=p.steamid AND p2.name IS NOT NULL AND p2.name<>''
                     ORDER BY p2.match_id DESC LIMIT 1) name,
                   MAX(p.is_me) is_me,
-                  (SELECT COUNT(*) FROM pms x WHERE x.steamid=p.steamid) matches
+                  -- 场次统计必须和概览同口径：被标记「不算数」的局不进 matches，
+                  -- 单独放到 excluded 里给前端提示。之前这里数全表 pms，
+                  -- 出现「下拉 24 场 / 概览 22 场」的对不上（差的就是 excluded 的局）。
+                  (SELECT COUNT(*) FROM pms x WHERE x.steamid=p.steamid
+                    AND x.match_id IN (SELECT id FROM matches
+                                        WHERE excluded IS NULL OR excluded=0)) matches,
+                  (SELECT COUNT(*) FROM pms x WHERE x.steamid=p.steamid
+                    AND x.match_id IN (SELECT id FROM matches
+                                        WHERE excluded=1)) excluded
            FROM players p
            GROUP BY p.steamid
            ORDER BY is_me DESC, matches DESC, p.steamid""")]

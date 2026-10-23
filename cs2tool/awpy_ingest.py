@@ -64,6 +64,47 @@ def _side(v) -> str | None:
     return SIDE_MAP.get(str(v).lower())
 
 
+def _resolve_me(conn, roster_sids, given=None):
+    """决定本场的「我」是谁：settings 配置 > 传入参数 > 库里历史值。
+
+    三者都**必须真的出现在本场名单里**，否则返回 None（这场按「无我」处理）。
+    以前这里直接继承 matches 表里最近一个非空 my_steamid，一个脏值会被一场一场
+    传下去——真实案例：库里 25 场全写成 ...970（本人 ...967），于是每场都取不到
+    my_side0，a_side 退化成硬编码的 T，比分/胜负/胜率整体算错。
+    """
+    try:
+        roster_sids = {int(x) for x in roster_sids}
+    except Exception:
+        return None
+    cands = []
+    try:
+        import settings as _st
+        for k in ("my_steamid", "steamid"):
+            v = str(_st.get(k, "") or "").strip()
+            if v.isdigit():
+                cands.append(int(v))
+    except Exception:
+        pass
+    if given:
+        try:
+            cands.append(int(given))
+        except (TypeError, ValueError):
+            pass
+    try:
+        for r in conn.execute(
+                "SELECT my_steamid m, COUNT(*) c FROM matches "
+                "WHERE my_steamid IS NOT NULL GROUP BY my_steamid "
+                "ORDER BY c DESC LIMIT 5"):
+            if r["m"]:
+                cands.append(int(r["m"]))
+    except Exception:
+        pass
+    for c in cands:
+        if c in roster_sids:
+            return c
+    return None
+
+
 # ---------- 武器分类：急停只对「枪械」有意义 ----------
 # weapon_fire 不区分开枪和投掷——扔闪光/手雷/燃烧瓶、挥刀都会触发它。
 # 移动投掷是常态，把这些算进急停的分母会让指标失真（实测 105 次道具/刀里
@@ -234,11 +275,10 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
                     pside[sid] = _side(k["victim_side"]) or "T"
                     break
 
-    if my_steamid is None:
-        r = conn.execute("SELECT my_steamid FROM matches WHERE my_steamid IS NOT NULL "
-                         "ORDER BY id DESC LIMIT 1").fetchone()
-        if r and r["my_steamid"]:
-            my_steamid = int(r["my_steamid"])
+    # 「我」必须真的在场：settings 配置优先，其次传入值/库里历史值，
+    # 都不在本场名单里就返回 None —— 宁可这场标「无我」，也不能拿别人的队
+    # 冒充我方（旧逻辑继承脏值后 a_side 会退化成 T，胜负和比分全错）。
+    my_steamid = _resolve_me(conn, pside.keys(), my_steamid)
 
     # ---------- 写 matches
     total_ticks = int(rounds["end_tick"].max())
@@ -481,12 +521,18 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
         return o
 
     # A 队（a_side）：每回合我方所在阵营，换边后跟着变
+    # 本场没识别出我（my_side0=None）时**不要**硬写成 T —— 那会把「别人的战绩」
+    # 冒充成我的：比分和胜负全按 T 方算，看起来有数据、其实跟我无关。
     my_side0 = pside.get(my_steamid) if my_steamid else None
     with conn:
         for rr in conn.execute("SELECT round, winner FROM rounds WHERE match_id=?", (mid,)):
-            a_side = side_of(my_side0, int(rr["round"])) if my_side0 else "T"
+            if my_side0:
+                a_side = side_of(my_side0, int(rr["round"]))
+                a_win = int(rr["winner"] == a_side)
+            else:
+                a_side, a_win = "", 0
             conn.execute("UPDATE rounds SET a_side=?, a_win=? WHERE match_id=? AND round=?",
-                         (a_side, int(rr["winner"] == a_side), mid, rr["round"]))
+                         (a_side, a_win, mid, rr["round"]))
 
     # 每人每阵营的回合数 + 击杀/死亡/原始伤害
     agg: dict[int, dict] = {}

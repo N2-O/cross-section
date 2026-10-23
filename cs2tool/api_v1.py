@@ -214,7 +214,9 @@ def api_players(conn, qs):
                                    ORDER BY p2.match_id DESC LIMIT 1) name,
                                  MAX(p.is_me) is_me,
                                  COUNT(DISTINCT p.match_id) matches
-                          FROM players p GROUP BY p.steamid
+                          FROM players p JOIN matches m ON m.id=p.match_id
+                          WHERE (m.excluded IS NULL OR m.excluded=0)
+                          GROUP BY p.steamid
                           HAVING matches >= ?
                           ORDER BY matches DESC, p.steamid""", (minm,))
     return _ok(rows)
