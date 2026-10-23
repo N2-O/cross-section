@@ -351,37 +351,28 @@ async function pollPull() {
     hidePull();
   }
 }
-/* ===== 拉取配置自检：按钮点、失败自动跑，不用去命令行 ===== */
+/* ===== 拉取失败时就地自检，结论直接摊在下面 ===== */
 async function checkPull() {
   const box = $('#pullDiag');
   if (!box) return;
-  const btn = $('#btnCheckPull');
-  if (btn) btn.disabled = true;
   box.hidden = false;
-  box.innerHTML = '<div class="inf">正在检测配置（会真的请求一次 Steam，约十几秒）…</div>';
+  box.innerHTML = '<div class="inf">正在检测配置（会真的请求一次 Steam，十几秒）…</div>';
   let r = null;
   try {
     r = await post('/api/check_pull', {});
   } catch (e) {
     box.innerHTML = `<div class="vd bad">自检请求失败：${esc(String(e))}</div>`;
-    if (btn) btn.disabled = false;
     return;
   }
-  if (btn) btn.disabled = false;
   const rows = (r.steps || []).map(s => {
     const cls = s.ok === true ? 'ok' : (s.ok === false ? 'bad' : 'inf');
     const mark = s.ok === true ? '✓' : (s.ok === false ? '✗' : '·');
     return `<i class="${cls}">${mark}</i><span><span class="nm">${esc(s.name || '')}</span>` +
            `${esc(s.detail || '')}</span>`;
   }).join('');
-  box.innerHTML = `<span class="cl" id="diagClose">关闭 ×</span>
-    <div class="dg">${rows || '<i class="inf">·</i><span class="inf">没有返回检查项</span>'}</div>
+  box.innerHTML = `<div class="dg">${rows || '<i class="inf">·</i><span class="inf">没有返回检查项</span>'}</div>
     <div class="vd${r.ok ? '' : ' bad'}">${esc(r.verdict || '')}</div>`;
-  const c = $('#diagClose');
-  if (c) c.onclick = () => { box.hidden = true; };
 }
-const _btnCheckPull = $('#btnCheckPull');
-if (_btnCheckPull) _btnCheckPull.onclick = checkPull;
 
 $('#btnScan').onclick = async () => {
   hint('扫描中…');
