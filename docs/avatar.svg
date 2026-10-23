@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <style>
+      .bg { fill: #0b0b0c; }
+      .cs { font: 650 236px/1 system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+            fill: #e8e8e9; letter-spacing: -0.045em; }
+      .rule { stroke: #2c2d2f; stroke-width: 2; }
+      .cap { font: 500 17px/1 system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+             fill: #6f6f73; letter-spacing: 0.34em; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="512" height="512"/>
+
+  <!-- 极淡网格，跟宣传页同一套语言 -->
+  <g stroke="#ffffff" stroke-opacity="0.035" stroke-width="1">
+    <path d="M128 0 V512 M256 0 V512 M384 0 V512"/>
+    <path d="M0 170 H512 M0 340 H512"/>
+  </g>
+
+  <text class="cs" x="256" y="300" text-anchor="middle">CS</text>
+
+  <line class="rule" x1="112" y1="356" x2="400" y2="356"/>
+
+  <text class="cap" x="256" y="386" text-anchor="middle">CROSS-SECTION</text>
+</svg>
