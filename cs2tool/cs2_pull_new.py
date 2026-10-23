@@ -236,6 +236,10 @@ def main() -> int:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
     log(f"start_code 已推进到: {code}")
 
+    # 记下这次清单：前端靠它数「下载进度」（CS2 下完的会落到 replays 目录）
+    write_json(os.path.join(DATA, "pull_pending.json"),
+               {"t": time.strftime("%Y-%m-%d %H:%M:%S"), "total": len(new), "codes": new})
+
     write_json(RESULT, {"t": time.strftime("%Y-%m-%d %H:%M:%S"), "ok": True,
                         "status": "ok", "added": len(new), "codes": new,
                         "bat": os.path.basename(BAT), "start_code": code,

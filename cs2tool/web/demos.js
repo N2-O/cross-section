@@ -317,13 +317,47 @@ $('#btnPullNew').onclick = async () => {
   pollPull();
 };
 
+let _dlTimer = null;                 // 下载监视的定时器（hidePull 里要清，所以先声明）
 function showPull() { const e = $('#pullBar'); if (e) e.hidden = false; }
 function hidePull() {
+  clearTimeout(_dlTimer);
   const e = $('#pullBar');
   if (e) { e.hidden = true; const f = $('#pullFill'); if (f) f.style.width = '0'; }
 }
 
+/* ===== 下载进度 =====
+   工具本身不下载 demo —— 下载是 CS2 干的（下载清单 cs2_new_download.bat 会逐个唤起）。
+   能观测的只有「replays 目录里新落盘了几个 .dem」，所以进度就是 done/total。 */
+async function downloadWatch() {
+  const bar = $('#pullBar'), msg = $('#pullMsg'), fill = $('#pullFill');
+  if (!bar || !msg) return;
+  bar.hidden = false;
+  let r = null;
+  try { r = await api('/api/download_progress'); } catch (e) { return; }
+  if (!r || !r.ok) {
+    msg.textContent = (r && r.error) || '查不到下载进度';
+    return;
+  }
+  const total = Number(r.total || 0), done = Number(r.done || 0);
+  if (!total) {
+    msg.textContent = '清单已生成，双击工具目录里的 cs2_new_download.bat 让 CS2 开始下载';
+    return;
+  }
+  if (fill) fill.style.width = `${Math.min(100, done / total * 100)}%`;
+  if (done >= total) {
+    msg.textContent = `${done}/${total} 场已下载完成 · 点「⇩ 从 CS2 拉取」把它导进 demos`;
+    hint('下载完成：点「⇩ 从 CS2 拉取」，再点「分析未处理」', true);
+    return;                                  // 到齐了就停，别一直轮询
+  }
+  msg.textContent = done
+    ? `CS2 正在下载：已完成 ${done}/${total} 场`
+    : `等待 CS2 开始下载（0/${total}）· 双击 cs2_new_download.bat，脚本会自动一场场触发`;
+  clearTimeout(_dlTimer);
+  _dlTimer = setTimeout(downloadWatch, 5000);
+}
+
 async function pollPull() {
+  clearTimeout(_dlTimer);
   let p = {};
   try { p = await api('/api/pull_progress'); } catch (e) { p = { state: 'error' }; }
   const fill = $('#pullFill'), msg = $('#pullMsg');
@@ -340,8 +374,8 @@ async function pollPull() {
   if (p.state === 'done') {
     msg.textContent = p.msg || '完成';
     hint(p.msg || '完成', true);
-    setTimeout(hidePull, 3000);
     load();
+    downloadWatch();          // 清单生成了，接着盯「CS2 下载到哪了」
   } else if (p.state === 'error') {
     msg.textContent = '失败：' + (p.error || '未知原因');
     hint('拉取失败：' + (p.error || ''), false);

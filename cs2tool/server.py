@@ -500,13 +500,8 @@ def api_scan():
     return {"ok": True, **r}
 
 
-def api_pull():
-    """从 CS2 的 replays 目录把新 demo 复制过来。
-
-    CS2 客户端里「下载 demo」后文件落在 <CS2>/game/csgo/replays/*.dem，
-    用户不用手动去文件夹里翻。路径优先用设置里的 replays_dir，
-    没有就按 cs2_dir 推，再没有就自动探测。
-    """
+def _replays_dir():
+    """CS2 的 replays 目录：设置里的 → 由 cs2_dir 推 → 从进程探测。"""
     st = S.load() or {}
     cands = []
     if st.get("replays_dir"):
@@ -520,8 +515,17 @@ def api_pull():
             cands.append(det["replays_dir"])
     except Exception:
         pass
+    return next((c for c in cands if c and os.path.isdir(c)), None)
 
-    src = next((c for c in cands if c and os.path.isdir(c)), None)
+
+def api_pull():
+    """从 CS2 的 replays 目录把新 demo 复制过来。
+
+    CS2 客户端里「下载 demo」后文件落在 <CS2>/game/csgo/replays/*.dem，
+    用户不用手动去文件夹里翻。路径优先用设置里的 replays_dir，
+    没有就按 cs2_dir 推，再没有就自动探测。
+    """
+    src = _replays_dir()
     if not src:
         return {"ok": False,
                 "error": "找不到 CS2 的 replays 目录。请在「设置 → CS2 安装目录」里填写，"
@@ -734,6 +738,41 @@ class Handler(BaseHTTPRequestHandler):
                         return self._send(*_json(json.load(_f)))
                 except Exception:
                     return self._send(*_json({"state": "idle"}))
+            if path == "/api/download_progress":
+                # 下载进度：清单里有 N 场，CS2 下完的会落到 replays 目录。
+                # 工具本身不下载（下载是 CS2 干的），只能数落盘的文件。
+                _pend = os.path.join(DATA_DIR, "pull_pending.json")
+                try:
+                    with open(_pend, encoding="utf-8") as _f:
+                        _pd = json.load(_f)
+                except Exception:
+                    _pd = {}
+                _total = int(_pd.get("total") or 0)
+                _t0 = str(_pd.get("t") or "")
+                _src = _replays_dir()
+                if not _src:
+                    return self._send(*_json({"ok": False, "total": _total, "done": 0,
+                                              "error": "找不到 CS2 的 replays 目录"}))
+                _got = []
+                try:
+                    for _fn in os.listdir(_src):
+                        if not _fn.lower().endswith(".dem"):
+                            continue
+                        _p = os.path.join(_src, _fn)
+                        try:
+                            _s = os.stat(_p)
+                        except OSError:
+                            continue
+                        _mt = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(_s.st_mtime))
+                        if _t0 and _mt < _t0:
+                            continue          # 只数这次清单之后下载的
+                        _got.append({"name": _fn, "size": _s.st_size, "mtime": _mt})
+                except OSError as e:
+                    return self._send(*_json({"ok": False, "total": _total, "done": 0,
+                                              "error": f"读不了 replays 目录：{e}"}))
+                _got.sort(key=lambda x: x["mtime"])
+                return self._send(*_json({"ok": True, "dir": _src, "total": _total,
+                                          "done": len(_got), "files": _got[-8:]}))
             if path == "/api/pull_result":
                 # 上次拉取结果（自动检查或手动跑过之后写的）
                 _p = os.path.join(DATA_DIR, "pull_last.json")
@@ -952,10 +991,20 @@ class Handler(BaseHTTPRequestHandler):
                     upd["cs2_dir"] = ""
                     need_restart = True
                 # Steam 拉取相关配置（只存盘，不在这里联网；脚本读同一个 settings.json）
-                for k in ("steam_api_key", "steam_auth_code", "steamid",
-                          "start_code", "replays_dir"):
-                    if k in payload:
-                        upd[k] = (payload.get(k) or "").strip().strip('"')
+                # 允许直接粘链接：Steam 主页 URL、比赛历史链接、整段分享文本都行——
+                # 统一在这里提取成要的值再存，别让人为了一个 steamid 去数位数。
+                _notes = []
+                _raw = {k: payload.get(k) for k in
+                        ("steam_api_key", "steam_auth_code", "steamid",
+                         "start_code", "replays_dir") if k in payload}
+                if _raw:
+                    try:
+                        import check_pull as _cp
+                        _fixed, _notes = _cp.normalize_fields(_raw)
+                    except Exception:
+                        _fixed = {k: str(v or "").strip().strip('"') for k, v in _raw.items()}
+                    for k, v in _fixed.items():
+                        upd[k] = v
                 if "auto_pull_hours" in payload:
                     try:
                         upd["auto_pull_hours"] = max(0.0, float(payload.get("auto_pull_hours") or 0))
@@ -983,6 +1032,7 @@ class Handler(BaseHTTPRequestHandler):
                 with _lock:
                     store2.scan_demos(_conn, DEMO_DIR, _cfg_steamid())
                 return self._send(*_json({"ok": True, "need_restart": need_restart,
+                                          "notes": _notes,
                                           "paths": {"demos": DEMO_DIR, "data": DATA_DIR}}))
             if u.path == "/api/pull_new":
                 # 配置不全就把缺的字段名回给前端，前端据此打开说明页
