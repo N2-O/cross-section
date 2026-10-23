@@ -12,35 +12,35 @@ body{margin:0}
   padding:26px 18px 60px 4px;border-right:1px solid rgba(255,255,255,.06)}
 .side::-webkit-scrollbar{width:3px}
 .side::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12)}
-.side .brand{font-size:15px;font-weight:650;margin-bottom:4px}
-.side .brand>.brand-ver{font-size:10.5px;font-weight:400;color:var(--dim);margin-left:5px}
-.side .grp{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+.side .brand{font-size: 15px;font-weight:650;margin-bottom:4px}
+.side .brand>.brand-ver{font-size: 12px;font-weight:400;color:var(--dim);margin-left:5px}
+.side .grp{font-size: 12px;letter-spacing:.1em;text-transform:uppercase;
   color:var(--dim);opacity:.6;margin:20px 0 7px;padding-left:10px}
-.side a{display:block;font-size:12.5px;color:var(--dim);padding:5px 10px;
+.side a{display:block;font-size: 13px;color:var(--dim);padding:5px 10px;
   border-left:2px solid transparent;line-height:1.45}
 .side a:hover{color:var(--txt)}
 .side a.on{color:var(--txt);border-left-color:var(--acc);background:rgba(255,255,255,.035)}
-.side .back{margin-top:24px;font-size:11.5px}
+.side .back{margin-top:24px;font-size: 12px}
 /* 正文 */
 .body{padding:26px 0 120px 44px;max-width:900px;position:relative}
 .body::before{content:'';position:fixed;inset:0;background:rgba(6,6,7,.55);
   z-index:-1;pointer-events:none}
 .body section{margin-bottom:56px;scroll-margin-top:24px}
-.body h2{font-size:24px;font-weight:600;letter-spacing:-.01em;margin:0 0 6px;
+.body h2{font-size: 24px;font-weight:600;letter-spacing:-.01em;margin:0 0 6px;
   display:flex;align-items:baseline;gap:11px}
-.body h2 .num{font-size:12px;color:var(--acc);opacity:.6;
+.body h2 .num{font-size: 13px;color:var(--acc);opacity:.6;
   font-variant-numeric:tabular-nums;letter-spacing:.06em}
-.body .lead{color:var(--dim);font-size:13px;margin:0 0 20px;line-height:1.7}
-.body h3{font-size:15px;font-weight:600;margin:26px 0 9px}
-.body p{font-size:13px;line-height:1.85;margin:0 0 11px}
-.body ul,.body ol{font-size:13px;line-height:1.9;margin:0 0 12px;padding-left:20px}
+.body .lead{color:var(--dim);font-size: 13px;margin:0 0 20px;line-height:1.7}
+.body h3{font-size: 15px;font-weight:600;margin:26px 0 9px}
+.body p{font-size: 13px;line-height:1.85;margin:0 0 11px}
+.body ul,.body ol{font-size: 13px;line-height:1.9;margin:0 0 12px;padding-left:20px}
 .body li{margin-bottom:3px}
-.body code{font-size:12px;background:rgba(255,255,255,.06);padding:1px 5px;
+.body code{font-size: 13px;background:rgba(255,255,255,.06);padding:1px 5px;
   border-radius:2px;font-family:inherit}
 .body b{font-weight:600}
 /* 表格 */
-.dt{width:100%;border-collapse:collapse;font-size:12.5px;margin:12px 0 16px}
-.dt th{text-align:left;font-weight:500;font-size:11px;color:var(--dim);
+.dt{width:100%;border-collapse:collapse;font-size: 13px;margin:12px 0 16px}
+.dt th{text-align:left;font-weight:500;font-size: 12px;color:var(--dim);
   padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.1);white-space:nowrap}
 .dt td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.045);
   vertical-align:top;line-height:1.6}
@@ -48,23 +48,23 @@ body{margin:0}
 .dt .n{text-align:right;font-variant-numeric:tabular-nums}
 /* 提示条 */
 .tip{border-left:2px solid var(--acc);background:rgba(255,255,255,.03);
-  padding:11px 14px;font-size:12.5px;line-height:1.75;margin:14px 0;color:var(--dim)}
+  padding:11px 14px;font-size: 13px;line-height:1.75;margin:14px 0;color:var(--dim)}
 .tip b{color:var(--txt)}
 /* 示意图：纯 CSS 画，不用截图 */
 .fig{border:1px solid rgba(255,255,255,.09);padding:14px;margin:14px 0;
   background:rgba(255,255,255,.015)}
-.fig .cap{font-size:11px;color:var(--dim);margin-top:9px;opacity:.75}
+.fig .cap{font-size: 12px;color:var(--dim);margin-top:9px;opacity:.75}
 .fig .bar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
-.fig .chip{font-size:10.5px;border:1px solid rgba(255,255,255,.14);
+.fig .chip{font-size: 12px;border:1px solid rgba(255,255,255,.14);
   padding:2px 8px;color:var(--dim)}
 .fig .chip.on{border-color:var(--acc);color:var(--txt)}
-.fig .tbl{display:grid;gap:2px;font-size:10.5px}
+.fig .tbl{display:grid;gap:2px;font-size: 12px}
 .fig .tbl .r{display:grid;grid-template-columns:1.4fr repeat(4,1fr);gap:2px}
 .fig .tbl .c{padding:4px 6px;background:rgba(255,255,255,.03);color:var(--dim);
   overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .fig .tbl .r:first-child .c{background:rgba(255,255,255,.06);color:var(--txt)}
 .fig .cols{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.fig .cols .c{padding:14px 8px;text-align:center;font-size:10.5px;color:var(--dim);
+.fig .cols .c{padding:14px 8px;text-align:center;font-size: 12px;color:var(--dim);
   border:1px solid rgba(255,255,255,.08)}
 @media(max-width:900px){
   .doc{grid-template-columns:1fr}
@@ -79,7 +79,7 @@ body{margin:0}
     <div class="brand"><span class="xb" data-alt="Counter-Strike" aria-label="Cross-Section">
       <span class="xb-c">C</span><span class="xb-m1">ross-</span><span class="xb-s">S</span><span class="xb-m2">ection</span>
       <span class="xb-alt" aria-hidden="true">Counter-Strike</span>
-    </span> <span class="brand-ver">v6.1</span></div>
+    </span> <span class="brand-ver">v6.1.1</span></div>
     <div class="grp">开始</div>
     <a href="#intro">这是什么</a>
     <a href="#quick">快速开始</a>
@@ -567,7 +567,7 @@ body{margin:0}
         <tr><td>QQ</td><td><b>1470232252</b></td></tr>
       </table>
       <div class="tip">报 bug 最好带上：<b>哪张图哪一回合</b>、<b>你看到的数</b>、<b>你觉得应该是多少</b>。有这个三样我基本能直接定位。</div>
-      <p style="margin-top:30px;font-size:11px;color:var(--dim);opacity:.5">
+      <p style="margin-top:30px;font-size: 12px;color:var(--dim);opacity:.5">
         解析层：awpy 3.1.1 · 存储：SQLite · 界面：原生 HTML/CSS/JS · 全部本地运行
       </p>
     </section>

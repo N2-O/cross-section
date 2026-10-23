@@ -512,6 +512,18 @@ footer .cols p{margin:0}
     <p class="dl-notes">
       数据位置：<code>data/cs2.db</code> 一个 SQLite 文件即为全部统计，拷走即是备份。首次启动会自动创建 <code>demos/</code> 与 <code>data/</code>；删除整个程序目录即清除，注册表与 AppData 不留任何内容。
     </p>
+    <div class="dl-notes" style="margin-top:26px">
+      <strong style="color:var(--ink)">能读哪些录像</strong><br>
+      Cross-Section 读的是 CS2 标准的 <code>.dem</code> 文件。官方匹配的录像已实测；<strong>5E 与完美世界</strong>下载下来的录像也是同一套封装，<strong>理论上可以直接解析，但我们还没有实测过</strong>——解析逻辑没有针对任何平台做特殊处理，能不能跑通取决于那份录像本身是不是标准的 CS2 demo。
+      <div style="margin:14px 0 12px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;line-height:2;color:var(--dim)">
+        官方匹配 ····· 已实测<br>
+        5E / 完美世界 ·· 同一格式，待验证<br>
+        FACEIT ······· 同一格式，待验证
+      </div>
+      如果你的第三方平台录像解析失败，把 demo 的文件头信息和报错贴到 <a href="https://github.com/N2-O/cross-section/issues">Issue</a>，比什么都管用。
+      <br><br>
+      <strong style="color:var(--ink)">分发渠道</strong>：只在 <a href="https://github.com/N2-O/cross-section/releases/latest">GitHub Releases</a> 发布。其他站点、网盘、群里转的包都不是这里发的，无法确认有没有被改动过。
+    </div>
   </section>
 
   <section id="privacy">
@@ -541,7 +553,7 @@ footer .cols p{margin:0}
     <div class="sec-h">
       <span class="idx">05</span>
       <h2>拿一个走</h2>
-      <span class="note">v6.1 · Windows x64</span>
+      <span class="note">v6.1.1 · Windows x64</span>
     </div>
     <div class="dl">
       <a href="https://github.com/N2-O/cross-section/releases/latest">
@@ -594,7 +606,7 @@ footer .cols p{margin:0}
         <a href="https://github.com/N2-O/cross-section/blob/main/LICENSE">MIT License</a><br>
         <a href="https://github.com/N2-O/cross-section/blob/main/DISCLAIMER.md">免责声明</a><br>
         <a href="https://github.com/N2-O/cross-section/blob/main/CHANGELOG.md">Changelog</a><br>
-        <span class="num" style="color:#3f3f42">v6.1</span>
+        <span class="num" style="color:#3f3f42">v6.1.1</span>
       </p>
     </div>
   </footer>
