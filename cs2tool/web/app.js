@@ -359,18 +359,40 @@ function rTrend() {
   const label = TREND_LABEL[key] || key;
   const vals = tl.map(x => Number(x[key] ?? 0));
   const mx = Math.max(...vals), mn = Math.min(...vals);
-  const span = Math.max(mx - mn, 0.0001);
+
+  /* 基准线：Rating 固定 1.00（这个体系的平均水准），其余指标用整段历史的加权平均。
+     基准线要参与 y 轴范围计算，否则落在可视区外就看不见了。 */
+  const tot = S.overview.total || {};
+  const isRating = key === 'rating';
+  const baseRaw = isRating ? 1 : Number(tot[key]);
+  const hasBase = Number.isFinite(baseRaw) && baseRaw > 0;
+  const base = hasBase ? baseRaw : null;
+  const lo = hasBase ? Math.min(mn, base) : mn;
+  const hi = hasBase ? Math.max(mx, base) : mx;
+  const span = Math.max(hi - lo, 0.0001);
 
   const W = 1120, H = 210, PL = 68, PR = 20, PT = 30, PB = 38;
   const iw = W - PL - PR, ih = H - PT - PB;
   const X = i => PL + (tl.length === 1 ? iw / 2 : iw * i / (tl.length - 1));
-  const Y = v2 => PT + ih - ((v2 - mn) / span) * ih;
+  const Y = v2 => PT + ih - ((v2 - lo) / span) * ih;
 
-  const grids = [mx, (mx + mn) / 2, mn].map(g =>
+  const grids = [hi, (hi + lo) / 2, lo].map(g =>
     `<line x1="${PL}" y1="${Y(g).toFixed(1)}" x2="${W - PR}" y2="${Y(g).toFixed(1)}"
        stroke="rgba(255,255,255,.07)" stroke-width="1"/>
      <text x="${PL - 12}" y="${(Y(g) + 4).toFixed(1)}" text-anchor="end"
        fill="#84848a" font-size="12" font-family="ui-monospace,monospace">${g.toFixed(fd)}</text>`).join('');
+
+  /* 基准线：细虚线 + 常显标签。标签贴右端，太靠顶时改画在线下方，避免出画布 */
+  let baseLayer = '';
+  if (hasBase) {
+    const by = Y(base);
+    const ly = by < PT + 14 ? by + 15 : by - 7;
+    baseLayer = `
+      <line x1="${PL}" y1="${by.toFixed(1)}" x2="${W - PR}" y2="${by.toFixed(1)}"
+        stroke="rgba(255,255,255,.3)" stroke-width="1" stroke-dasharray="4 4"/>
+      <text x="${W - PR}" y="${ly.toFixed(1)}" text-anchor="end"
+        fill="#9a9aa0" font-size="12">${isRating ? '基准 1.00' : '平均 ' + base.toFixed(fd)}</text>`;
+  }
 
   const path = vals.map((v2, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(v2).toFixed(1)}`).join(' ');
   const area = `M${X(0).toFixed(1)},${(PT + ih).toFixed(1)} `
@@ -389,13 +411,15 @@ function rTrend() {
         fill="#9a9aa0" font-size="12">${esc(mapCn(x.map))}</text>
       <text x="${X(i).toFixed(1)}" y="${H - 7}" text-anchor="middle"
         fill="#5f5f66" font-size="12">${esc(x.score || '')}</text>
-      <title>${esc(mapCn(x.map))} ${esc(x.score || '')} · ${label} ${lab}</title>
+      <title>${esc(mapCn(x.map))} ${esc(x.score || '')} · ${label} ${lab}${hasBase ? `（${isRating ? '基准 1.00' : '平均 ' + base.toFixed(fd)}）` : ''}</title>
     </g>`;
   }).join('');
 
-  box.innerHTML = `<div id="trTitle">${label}<span class="n">共 ${all.length} 场${all.length > CAP ? ` · 只画最近 ${CAP} 场` : ''}</span></div>
+  const baseSub = hasBase ? ` · ${isRating ? '基准 1.00' : '平均 ' + base.toFixed(fd)}` : '';
+  box.innerHTML = `<div id="trTitle">${label}<span class="n">共 ${all.length} 场${all.length > CAP ? ` · 只画最近 ${CAP} 场` : ''}${baseSub}</span></div>
     <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">
       ${grids}
+      ${baseLayer}
       <path d="${area}" fill="rgba(200,200,210,.07)"/>
       <path d="${path}" fill="none" stroke="#c2c2c6" stroke-width="1.6"
         stroke-linejoin="round" stroke-linecap="round"/>
