@@ -1146,7 +1146,10 @@ if ($('#setSave')) $('#setSave').onclick = async () => {
   });
   if (!r.ok) { h.className = 'hint'; h.textContent = r.error || '保存失败'; return; }
   h.className = 'hint ok';
-  h.textContent = r.need_restart ? '已保存。目录变更需重启程序生效。' : '已保存';
+  const bits = [];
+  if (r.need_restart) bits.push('目录变更需重启程序生效');
+  (r.notes || []).forEach(n => bits.push(n));
+  h.textContent = bits.length ? '已保存 · ' + bits.join('；') : '已保存';
   load();
 };
 

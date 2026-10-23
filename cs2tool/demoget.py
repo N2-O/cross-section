@@ -99,17 +99,24 @@ class _ShortRead(Exception):
 # --------------------------------------------------------------------------
 
 def decode_share_code(code):
-    """把分享码解成 (matchId, reservationId, tvPort)。
+    """把分享码解成 (matchId, prevMatchId, outcomeIdLow16)。
 
-    分享码形如 ``CSGO-RhCA2-GQbyi-RwMfm-XahGp-MsdVG``：去掉 ``CSGO`` 前缀和所有
-    连字符后剩 25 个字符，把它当成 57 进制大数（最低位在前，即从左到右逐位
-    ``big = big * 57 + 位值`` 时要用反序的字符序列）累加，再按 18 字节大端切分：
+    18 字节的真实布局（2026-10-24 用两组「分享码 ↔ 下载链接」实测确认）：
 
-    - bytes[0:8]  小端 → matchId
-    - bytes[8:16] 小端 → reservationId
-    - bytes[16:18] 小端 → tvPort
+        b[0:8]   小端 = 上一场比赛的 matchId（链式结构，用来往后推进）
+        b[8:16]  小端 = 本场 matchId           ← demo 文件名前半
+        b[16:18] 小端 = 文件名后半的低 16 位   ← ⚠ 只有低 16 位
 
-    参数非法时抛 ValueError（错误信息为中文）。
+    实测对照::
+
+        CSGO-peXk7-… → b[8:16]=3849944656909435518
+                        实际文件名 003849944656909435518_1163610824
+        CSGO-hXtJm-… → b[8:16]=3849940076326813921
+                        实际文件名 003849940076326813921_0395798432
+
+    文件名后半（outcomeId，32 位）只存了低 16 位，高位不在分享码里 ——
+    所以**光凭分享码拼不出可下载的地址**，那一段只能从比赛历史页取。
+    这里保留解码能力，用于识别"这场是哪场"，不要用它读拼 URL。
     """
     if not isinstance(code, str):
         raise ValueError('分享码必须是字符串')
@@ -141,12 +148,11 @@ def decode_share_code(code):
     if big >= _SHARE_MAX:
         raise ValueError('分享码数值超出 18 字节范围，分享码可能已损坏')
 
-    # 等价于「补零到 36 位十六进制再按字节切分」
     buf = big.to_bytes(_SHARE_BYTES, 'big')
-    match_id = int.from_bytes(buf[0:8], 'little')
-    reservation_id = int.from_bytes(buf[8:16], 'little')
-    tv_port = int.from_bytes(buf[16:18], 'little')
-    return match_id, reservation_id, tv_port
+    prev_match_id = int.from_bytes(buf[0:8], 'little')
+    match_id = int.from_bytes(buf[8:16], 'little')
+    tail16 = int.from_bytes(buf[16:18], 'little')
+    return match_id, prev_match_id, tail16
 
 
 def make_body(match_id, reservation_id):
@@ -647,14 +653,26 @@ def download_one(code_or_body, demo_dir, tmp_dir, log=None, progress=None,
     }
 
     part_path = None
+    given_url = None
     try:
         text = '' if code_or_body is None else str(code_or_body).strip()
         if not text:
             raise ValueError('分享码或文件名主体为空')
 
-        if text[:len(_SHARE_PREFIX)].upper() == _SHARE_PREFIX:
-            match_id, reservation_id, _tv_port = decode_share_code(text)
-            body = make_body(match_id, reservation_id)
+        if text.lower().startswith(('http://', 'https://')):
+            # 页面里复制来的完整链接：直接用，不用扫分片
+            m = re.search(r'/730/(\d+_\d+)\.dem\.bz2', text)
+            if not m:
+                raise ValueError('链接里找不到 <matchid>_<outcomeid>.dem.bz2：%s' % text)
+            body = m.group(1)
+            match_id, reservation_id = parse_body(body)
+            given_url = text
+        elif text[:len(_SHARE_PREFIX)].upper() == _SHARE_PREFIX:
+            match_id, _prev, _tail = decode_share_code(text)
+            raise ValueError(
+                '分享码只能定位比赛（matchId=%d），文件名后半段的完整值（outcomeId）'
+                '不在分享码里，拼不出下载地址。请在比赛历史页复制该场的 demo 链接粘进来。'
+                % match_id)
         else:
             match_id, reservation_id = parse_body(text)
             body = make_body(match_id, reservation_id)
@@ -676,8 +694,13 @@ def download_one(code_or_body, demo_dir, tmp_dir, log=None, progress=None,
         last_error = None
         done = 0
         for round_index in range(max(1, int(max_sources))):
-            url = find_url(body, log=log, known_hosts=known_hosts,
-                           cache_path=cache_path, exclude=failed_hosts)
+            if round_index == 0 and given_url:
+                url = given_url
+                if log:
+                    log('用页面给的链接直接下：%s' % url)
+            else:
+                url = find_url(body, log=log, known_hosts=known_hosts,
+                               cache_path=cache_path, exclude=failed_hosts)
             if not url:
                 if last_error:
                     result['error'] = (

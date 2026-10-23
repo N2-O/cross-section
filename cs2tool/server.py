@@ -562,31 +562,30 @@ _http_pull = {"running": False, "total": 0, "done": 0, "current": "",
               "ok_count": 0, "fail_count": 0, "errors": []}
 
 
-def api_http_pull(codes=None):
+def api_http_pull(items=None):
     if _http_pull["running"]:
         return {"ok": False, "error": "已有下载任务在进行"}
-    if not codes:
-        # 待下载清单：优先 pull_pending，其次 pull_last（老版本只写过 pull_last，
-        # 里面同样带 codes —— 这样升级前没下成的那批还能救回来，不用重拉）
+    if not items:
+        # 待下载清单：优先 pull_pending，其次 pull_last（里面同样带 codes）
         for fn in ("pull_pending.json", "pull_last.json"):
             try:
                 with open(os.path.join(DATA_DIR, fn), encoding="utf-8") as f:
-                    codes = (json.load(f) or {}).get("codes") or []
+                    items = (json.load(f) or {}).get("codes") or []
             except Exception:
-                codes = []
-            if codes:
+                items = []
+            if items:
                 break
-    if not codes:
+    if not items:
         return {"ok": False, "error": "没有待下载的清单——先点「从 Steam 拉新比赛」"}
     try:
         import demoget  # 懒加载：老包里没这个文件也不影响其它功能
     except Exception as e:
         return {"ok": False, "error": f"下载模块不可用：{e}"}
-    _http_pull.update({"running": True, "total": len(codes), "done": 0, "current": "",
+    _http_pull.update({"running": True, "total": len(items), "done": 0, "current": "",
                        "bytes": 0, "bytes_total": 0, "error": None,
                        "ok_count": 0, "fail_count": 0, "errors": []})
-    threading.Thread(target=_http_pull_worker, args=(list(codes),), daemon=True).start()
-    return {"ok": True, "total": len(codes)}
+    threading.Thread(target=_http_pull_worker, args=(list(items),), daemon=True).start()
+    return {"ok": True, "total": len(items)}
 
 
 def _http_pull_worker(codes):
@@ -1136,9 +1135,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(*_json(api_playdemo(payload.get("name"))))
             if u.path == "/api/http_pull":
                 # 直接走 Valve 的 demo CDN 下载（绕开 CS2 客户端）。
-                # 传 codes 就下一批，不传就用上次「拉新比赛」记下的清单。
-                _codes = payload.get("codes")
-                return self._send(*_json(api_http_pull(_codes)))
+                # urls = 从比赛历史页复制来的链接；codes = 上次清单（只能定位比赛，拼不出地址）
+                _items = payload.get("urls") or payload.get("codes")
+                return self._send(*_json(api_http_pull(_items)))
             if u.path == "/api/pull_new":
                 # 配置不全就把缺的字段名回给前端，前端据此打开说明页
                 cfg = S.load() or {}

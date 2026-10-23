@@ -359,16 +359,37 @@ $('#btnPullNew').onclick = async () => {
     hint(r.error || '启动失败', false);
     return;
   }
-  // 清单已写进 pull_pending.json，这里直接让工具去 Valve 的 CDN 下载
+  // 清单已记下（start_code 也推进了）。但下载地址的后半段不在分享码里，
+  // 只能从比赛历史页取 —— 那页要登录，工具拿不到，所以让用户贴一次。
+  const pasted = prompt(
+    `发现 ${pv.count} 场新比赛，清单已记下。\n\n` +
+    '下载地址要登录 Steam 才看得到，麻烦你贴一下：\n' +
+    '1) 打开  steamcommunity.com/my/gcpd/730/?tab=matchhistorycompetitive\n' +
+    '2) 按 Ctrl+U 看源码 → Ctrl+A 全选 → Ctrl+C\n' +
+    '3) 粘到下面（只粘 demo 链接也行，一行一条）', '');
+  if (!pasted) { hint('清单已保存，下次点这里还能继续下', false); return; }
+
+  const re = /(?:https?:\/\/)?(replay\d+\.valve\.net)\/730\/(\d+_\d+)\.dem\.bz2/g;
+  // 按「比赛标识」去重：同一场可能出现在不同分片域名下，下一份就够
+  const seen = new Set();
+  const urls = [];
+  for (const m of pasted.matchAll(re)) {
+    const body = m[2];
+    if (seen.has(body)) continue;
+    seen.add(body);
+    urls.push(`http://${m[1]}/730/${body}.dem.bz2`);
+  }
+  if (!urls.length) {
+    hint('粘进来的内容里没找到 demo 链接（要含 replay*.valve.net/730/…dem.bz2）', false);
+    return;
+  }
   showPull();
-  const hp = await post('/api/http_pull', {});
+  const hp = await post('/api/http_pull', { urls });
   if (hp.ok) {
-    hint('开始下载…');
+    hint(`开始下载 ${urls.length} 场…`);
     httpPullWatch();
   } else {
-    // 下载模块不可用 → 退回老路：生成清单让你双击 bat
-    hint(hp.error || '直连下载不可用，改用 CS2 下载', false);
-    pollPull();
+    hint(hp.error || '启动下载失败', false);
   }
 };
 

@@ -38,6 +38,49 @@ def mask(v: str) -> str:
     return f"{v[:6]}…{v[-4:]}（{len(v)} 字符）"
 
 
+_RE_SID = re.compile(r"7656119\d{10}")
+_RE_CODE = re.compile(r"CSGO(?:-[A-Za-z0-9]{5}){5}")
+_RE_AUTH = re.compile(r"[A-Za-z0-9]{4}-[A-Za-z0-9]{5}-[A-Za-z0-9]{4}")
+_RE_KEY = re.compile(r"\b[0-9A-Fa-f]{32}\b")
+_RE_VANITY = re.compile(r"steamcommunity\.com/id/([^/?#\s]+)", re.I)
+
+
+def normalize_fields(raw: dict) -> tuple[dict, list[str]]:
+    """把粘进来的链接 / 整段文字提取成要的值。
+
+    用户不该为了一个 steamid 去数位数：粘
+    https://steamcommunity.com/profiles/76561198…/ 也应该能用。
+    """
+    out, notes = {}, []
+    for k, v in (raw or {}).items():
+        s = str(v or "").strip().strip('"').strip()
+        if s:
+            if k == "steamid":
+                m = _RE_SID.search(s)
+                if m:
+                    if m.group(0) != s:
+                        notes.append(f"steamid：已从输入里提取 {m.group(0)}")
+                    s = m.group(0)
+            elif k == "start_code":
+                m = _RE_CODE.search(s)
+                if m:
+                    if m.group(0) != s:
+                        notes.append("start_code：已从输入里提取 CSGO-… 分享码")
+                    s = m.group(0)
+            elif k == "steam_auth_code":
+                m = _RE_AUTH.search(s)
+                if m and m.group(0) != s:
+                    notes.append("auth_code：已从输入里提取认证码")
+                    s = m.group(0)
+            elif k == "steam_api_key":
+                m = _RE_KEY.search(s)
+                if m and m.group(0) != s:
+                    notes.append("api key：已从输入里提取 32 位 key")
+                    s = m.group(0)
+        out[k] = s
+    return out, notes
+
+
 def _bad_formats(cfg: dict) -> list[str]:
     """格式不对时 Steam 只会回 403，这里先把手抄错挡掉。"""
     bad = []
@@ -114,6 +157,26 @@ def run_check(data_dir: str | None = None) -> dict:
         "都填了" if not missing else "缺 " + "、".join(missing))
     if missing:
         return done(False, "还缺 " + "、".join(missing) + "，先去设置页补齐")
+
+    # 粘进来的链接/整段文字，先就地提取（他粘 steamcommunity 主页链接是常态）
+    cfg, _notes = normalize_fields(cfg)
+    if _notes:
+        add("自动识别", True, "；".join(_notes))
+
+    # /id/自定义名 这种得联网换成 17 位（有 key 才做，失败就留给格式检查报错）
+    if not _RE_SID.search(str(cfg.get("steamid") or "")):
+        mv = _RE_VANITY.search(str(cfg.get("steamid") or ""))
+        if mv and re.fullmatch(r"[0-9A-Fa-f]{32}", str(cfg.get("steam_api_key") or "")):
+            try:
+                st, body = _get("https://api.steampowered.com/ISteamUser/ResolveVanityURL/v1/?"
+                                + urllib.parse.urlencode({"key": str(cfg["steam_api_key"]),
+                                                          "vanityurl": mv.group(1)}))
+                j = json.loads(body).get("response", {}) if st == 200 else {}
+                if j.get("success") == 1 and j.get("steamid"):
+                    cfg["steamid"] = str(j["steamid"])
+                    add("自动识别", True, f"自定义链接 /id/{mv.group(1)} → {cfg['steamid']}")
+            except Exception:
+                pass
 
     # ---- 2. 格式
     bad = _bad_formats(cfg)
