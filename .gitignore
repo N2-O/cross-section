@@ -1,0 +1,27 @@
+# 运行期数据（用户自己的对局库）
+data/
+demos/
+replays/
+exports/
+
+# 便携运行时（体积大，不进仓库）
+python/
+.venv/
+venv/
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 打包产物
+*.zip
+update.zip
+
+# 历史遗留（update.py 时代的增量更新，已停用）
+_archive/
+
+# 系统杂物
+.DS_Store
+Thumbs.db
+desktop.ini

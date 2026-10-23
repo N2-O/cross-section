@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cross-Section · 把每一场 CS2 切开看横截面</title>
+<meta name="description" content="本地运行的 CS2 对局分析工具。读 .dem，攒成你自己的数据档案。不联网、不上传、不需要账号。">
+<style>
+:root{
+  --bg:#0b0b0c; --ink:#e8e8e9; --dim:#8a8a8e; --dimmer:#5f5f63;
+  --line:rgba(255,255,255,.09); --line2:rgba(255,255,255,.055);
+  --ct:#5b8fd4; --t:#d8a83c;
+  --noise:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='0.035'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --f:system-ui,-apple-system,"Segoe UI","Noto Sans SC","Microsoft YaHei",sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);font:16px/1.62 var(--f);
+  -webkit-font-smoothing:antialiased;
+}
+body::before{
+  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:var(--noise);opacity:.9;
+}
+body::after{
+  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse 46% 40% at 18% 6%,rgba(255,255,255,.055),transparent 68%),
+    radial-gradient(ellipse 38% 34% at 82% 52%,rgba(255,255,255,.035),transparent 70%);
+}
+.wrap{position:relative;z-index:1;max-width:1360px;margin:0 auto;padding:0 40px}
+.num{font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+
+/* ---------- 顶栏 ---------- */
+header{
+  position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:22px;
+  padding:14px 40px;border-bottom:1px solid var(--line2);
+  background:rgba(11,11,12,.86);backdrop-filter:blur(10px);
+}
+header nav{display:flex;gap:20px;margin-left:auto;font-size:14px}
+header nav a{color:var(--dim);text-decoration:none;transition:color .18s}
+header nav a:hover{color:var(--ink)}
+
+/* 品牌：C + ross- + S + ection */
+.xb{
+  display:inline-flex;align-items:baseline;position:relative;
+  font-size:17px;font-weight:650;letter-spacing:.01em;color:var(--ink);
+  user-select:none;line-height:1;
+}
+.xb-c,.xb-s{color:var(--ink)}
+.xb-m1,.xb-m2{
+  display:inline-block;max-width:0;overflow:hidden;opacity:0;white-space:nowrap;
+  transition:max-width 220ms cubic-bezier(.22,.61,.36,1),opacity 160ms linear;
+}
+.xb:hover .xb-m1,.xb:focus-visible .xb-m1{
+  max-width:3.4em;opacity:1;
+  transition:max-width 340ms cubic-bezier(.22,.61,.36,1),opacity 200ms linear;
+}
+.xb:hover .xb-m2,.xb:focus-visible .xb-m2{
+  max-width:5em;opacity:1;
+  transition:max-width 340ms cubic-bezier(.22,.61,.36,1) 110ms,opacity 200ms linear 110ms;
+}
+.xb-alt{position:absolute;left:0;top:0;visibility:hidden;white-space:nowrap}
+
+/* ---------- Hero ---------- */
+.hero{padding:104px 0 72px;display:grid;grid-template-columns:minmax(0,1fr) minmax(420px,.92fr);gap:72px;align-items:center}
+.hero h1{
+  margin:0;font-size:clamp(44px,5.4vw,82px);line-height:1.02;font-weight:680;
+  letter-spacing:-.035em;
+}
+.hero h1 em{font-style:normal;color:var(--dimmer)}
+.hero .lead{margin:26px 0 0;font-size:17px;color:var(--dim);max-width:34em}
+.hero .meta{margin-top:34px;display:flex;flex-wrap:wrap;gap:10px 22px;font-size:13px;color:var(--dimmer);letter-spacing:.04em;text-transform:uppercase}
+.hero .meta i{display:inline-block;width:5px;height:5px;background:var(--dim);margin-right:8px;vertical-align:2px}
+
+/* 横截面图 */
+.slab{position:relative}
+.slab svg{display:block;width:100%;height:auto;overflow:visible}
+.slab .cap{position:absolute;left:0;bottom:-30px;font-size:11.5px;color:var(--dimmer);letter-spacing:.1em;text-transform:uppercase}
+@keyframes sliceIn{from{transform:translateY(14px);opacity:0}to{transform:none;opacity:1}}
+@keyframes seamPulse{0%,100%{opacity:.25}50%{opacity:.75}}
+.seam{animation:seamPulse 6s ease-in-out infinite}
+.slab .lay{animation:sliceIn .7s cubic-bezier(.22,.61,.36,1) backwards}
+
+/* ---------- 章节 ---------- */
+section{position:relative;padding:88px 0;border-top:1px solid var(--line2)}
+.sec-h{display:flex;align-items:baseline;gap:18px;margin-bottom:44px}
+.sec-h .idx{font-size:12px;color:var(--dimmer);letter-spacing:.2em}
+.sec-h h2{margin:0;font-size:30px;font-weight:640;letter-spacing:-.025em}
+.sec-h .note{margin-left:auto;font-size:13.5px;color:var(--dimmer)}
+
+/* 数字条 */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line2)}
+.stats div{background:var(--bg);padding:30px 26px}
+.stats b{display:block;font-size:46px;font-weight:660;line-height:1;letter-spacing:-.04em}
+.stats span{display:block;margin-top:12px;font-size:13px;color:var(--dim)}
+.stats u{text-decoration:none;color:var(--dimmer);font-size:12px;letter-spacing:.08em}
+
+/* 功能 */
+.feats{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line2)}
+.feats article{background:var(--bg);padding:30px 26px 34px;transition:background .2s}
+.feats article:hover{background:rgba(255,255,255,.017)}
+.feats h3{margin:0 0 12px;font-size:16.5px;font-weight:620;letter-spacing:-.01em}
+.feats p{margin:0;font-size:14.5px;line-height:1.68;color:var(--dim)}
+.feats .tag{display:inline-block;margin-bottom:16px;font-size:11px;letter-spacing:.14em;color:var(--dimmer);text-transform:uppercase}
+
+/* 两栏 */
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:64px;align-items:start}
+.two p{margin:0 0 18px;font-size:16px;color:var(--dim)}
+.two strong{color:var(--ink);font-weight:600}
+.kv{border-top:1px solid var(--line2)}
+.kv div{display:flex;justify-content:space-between;gap:20px;padding:14px 0;border-bottom:1px solid var(--line2);font-size:14.5px}
+.kv dt{color:var(--dimmer)}
+.kv dd{margin:0;color:var(--ink)}
+.kv code{font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--dim)}
+
+/* 下载 */
+.dl{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line2);margin-bottom:26px}
+.dl a{
+  display:block;background:var(--bg);padding:32px 28px;text-decoration:none;color:inherit;
+  transition:background .2s;
+}
+.dl a:hover{background:rgba(255,255,255,.02)}
+.dl .k{font-size:11px;letter-spacing:.16em;color:var(--dimmer);text-transform:uppercase}
+.dl .n{margin:14px 0 8px;font-size:22px;font-weight:620;letter-spacing:-.02em}
+.dl .s{font-size:13.5px;color:var(--dim)}
+.dl .go{margin-top:20px;font-size:13px;color:var(--dimmer);letter-spacing:.06em}
+.dl a:hover .go{color:var(--ink)}
+.dl-notes{font-size:14px;color:var(--dim);line-height:1.8}
+.disclaim{
+  margin:0 0 28px;padding:20px 22px;border-left:2px solid rgba(255,255,255,.2);
+  background:rgba(255,255,255,.022);font-size:13.5px;line-height:1.9;color:var(--dim);
+}
+.disclaim strong{color:var(--ink);font-weight:600}
+.disclaim a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line)}
+.disclaim code{font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--dim)}
+
+/* 赞赏 */
+.support{margin-top:52px;padding:34px 30px;border:1px solid var(--line2);display:grid;grid-template-columns:minmax(0,1fr) auto;gap:32px;align-items:center}
+.support h3{margin:0 0 10px;font-size:18px;font-weight:620}
+.support p{margin:0;font-size:14.5px;color:var(--dim);max-width:46em}
+.support .btn{
+  display:inline-block;padding:12px 26px;border:1px solid var(--line);
+  color:var(--ink);text-decoration:none;font-size:14px;letter-spacing:.04em;
+  transition:border-color .2s,background .2s;white-space:nowrap;
+}
+.support .btn:hover{border-color:var(--dim);background:rgba(255,255,255,.03)}
+
+footer{padding:52px 0 72px;border-top:1px solid var(--line2);font-size:13px;color:var(--dimmer);line-height:1.9}
+footer a{color:var(--dim);text-decoration:none;border-bottom:1px solid var(--line)}
+footer a:hover{color:var(--ink)}
+footer .cols{display:grid;grid-template-columns:2fr 1fr;gap:48px}
+footer .cols p{margin:0}
+
+@media (max-width:1080px){
+  .hero{grid-template-columns:1fr;gap:48px;padding:72px 0 56px}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .feats{grid-template-columns:1fr 1fr}
+  .two{grid-template-columns:1fr;gap:36px}
+  .dl{grid-template-columns:1fr}
+  .support{grid-template-columns:1fr}
+}
+@media (max-width:640px){
+  .wrap{padding:0 22px}header{padding:12px 22px}header nav{display:none}
+  .feats{grid-template-columns:1fr}.stats{grid-template-columns:1fr}
+  section{padding:64px 0}
+}
+@media (prefers-reduced-motion:reduce){
+  .seam,.slab .lay{animation:none!important}
+  html{scroll-behavior:auto}
+}
+</style>
+
+<header>
+  <span class="xb" data-alt="Counter-Strike" aria-label="Cross-Section">
+    <span class="xb-c">C</span><span class="xb-m1">ross-</span><span class="xb-s">S</span><span class="xb-m2">ection</span>
+    <span class="xb-alt" aria-hidden="true">Counter-Strike</span>
+  </span>
+  <nav>
+    <a href="#what">是什么</a>
+    <a href="#feats">功能</a>
+    <a href="#privacy">隐私</a>
+    <a href="#download">下载</a>
+  </nav>
+</header>
+
+<div class="wrap">
+
+  <div class="hero">
+    <div>
+      <h1>把每一场对局<br>切开看<em>横截面</em></h1>
+      <p class="lead">CS2 的 <code>.dem</code> 里记着一整场比赛的每个 tick。它同时是一份完整的账本——谁在第几回合买了什么、哪一枪打在哪里、谁在残局里活了下来。Cross-Section 把这个账本翻成能看的东西，只给你自己看。</p>
+      <div class="meta">
+        <span><i></i>本地运行</span>
+        <span><i></i>不上传</span>
+        <span><i></i>不需要账号</span>
+        <span><i></i>Windows x64</span>
+      </div>
+    </div>
+
+    <div class="slab">
+      <svg viewBox="0 0 620 380" fill="none" aria-label="数据横截面示意">
+        <!-- 上半：完整的一条比赛时间轴 -->
+        <g opacity=".55">
+          <line x1="0" y1="40" x2="620" y2="40" stroke="#e8e8e9" stroke-opacity=".14"/>
+          <text x="0" y="28" fill="#5f5f63" font-size="10" letter-spacing="1.6" font-family="system-ui">ROUND 1 — 22</text>
+          <!-- 回合刻度 -->
+          <g stroke="#e8e8e9" stroke-opacity=".18">
+            <line x1="14" y1="34" x2="14" y2="46"/><line x1="42" y1="34" x2="42" y2="46"/>
+            <line x1="70" y1="34" x2="70" y2="46"/><line x1="98" y1="34" x2="98" y2="46"/>
+            <line x1="126" y1="34" x2="126" y2="46"/><line x1="154" y1="34" x2="154" y2="46"/>
+            <line x1="182" y1="34" x2="182" y2="46"/><line x1="210" y1="34" x2="210" y2="46"/>
+            <line x1="238" y1="34" x2="238" y2="46"/><line x1="266" y1="34" x2="266" y2="46"/>
+            <line x1="294" y1="34" x2="294" y2="46"/><line x1="322" y1="34" x2="322" y2="46"/>
+            <line x1="350" y1="34" x2="350" y2="46"/><line x1="378" y1="34" x2="378" y2="46"/>
+            <line x1="406" y1="34" x2="406" y2="46"/><line x1="434" y1="34" x2="434" y2="46"/>
+            <line x1="462" y1="34" x2="462" y2="46"/><line x1="490" y1="34" x2="490" y2="46"/>
+            <line x1="518" y1="34" x2="518" y2="46"/><line x1="546" y1="34" x2="546" y2="46"/>
+            <line x1="574" y1="34" x2="574" y2="46"/><line x1="602" y1="34" x2="602" y2="46"/>
+          </g>
+        </g>
+
+        <!-- 切缝 -->
+        <line class="seam" x1="310" y1="20" x2="310" y2="360" stroke="#e8e8e9" stroke-opacity=".4" stroke-dasharray="3 5"/>
+
+        <!-- 下半：切开后露出的层理 -->
+        <g font-family="system-ui" font-size="10">
+          <!-- 击杀 -->
+          <g class="lay" style="animation-delay:.05s">
+            <rect x="0" y="120" width="620" height="26" fill="#e8e8e9" fill-opacity=".05"/>
+            <rect x="0" y="120" width="286" height="26" fill="#e8e8e9" fill-opacity=".05"/>
+            <g fill="#e8e8e9" fill-opacity=".8">
+              <rect x="18" y="126" width="3" height="14"/><rect x="46" y="122" width="3" height="18"/>
+              <rect x="74" y="128" width="3" height="12"/><rect x="102" y="124" width="3" height="16"/>
+              <rect x="130" y="126" width="3" height="14"/><rect x="158" y="122" width="3" height="18"/>
+              <rect x="186" y="128" width="3" height="12"/><rect x="214" y="125" width="3" height="15"/>
+              <rect x="242" y="127" width="3" height="13"/>
+            </g>
+            <text x="330" y="137" fill="#8a8a8e" letter-spacing="1.4">KILLS · 743</text>
+          </g>
+
+          <!-- 伤害 -->
+          <g class="lay" style="animation-delay:.14s">
+            <rect x="0" y="160" width="620" height="26" fill="#e8e8e9" fill-opacity=".035"/>
+            <g fill="#e8e8e9" fill-opacity=".45">
+              <rect x="18" y="164" width="60" height="4"/><rect x="88" y="170" width="34" height="4"/>
+              <rect x="132" y="162" width="74" height="4"/><rect x="216" y="168" width="48" height="4"/>
+              <rect x="274" y="164" width="26" height="4"/>
+            </g>
+            <text x="330" y="177" fill="#8a8a8e" letter-spacing="1.4">DAMAGE · 41,208</text>
+          </g>
+
+          <!-- 经济 -->
+          <g class="lay" style="animation-delay:.23s">
+            <rect x="0" y="200" width="620" height="26" fill="#e8e8e9" fill-opacity=".03"/>
+            <g>
+              <rect x="18" y="206" width="44" height="14" fill="#5b8fd4" fill-opacity=".72"/>
+              <rect x="70" y="206" width="30" height="14" fill="#d8a83c" fill-opacity=".72"/>
+              <rect x="108" y="206" width="52" height="14" fill="#5b8fd4" fill-opacity=".5"/>
+              <rect x="168" y="206" width="38" height="14" fill="#d8a83c" fill-opacity=".5"/>
+              <rect x="214" y="206" width="22" height="14" fill="#5b8fd4" fill-opacity=".32"/>
+            </g>
+            <text x="330" y="217" fill="#8a8a8e" letter-spacing="1.4">ECONOMY · CT / T</text>
+          </g>
+
+          <!-- 道具 -->
+          <g class="lay" style="animation-delay:.32s">
+            <rect x="0" y="240" width="620" height="26" fill="#e8e8e9" fill-opacity=".025"/>
+            <g fill="#e8e8e9" fill-opacity=".28">
+              <circle cx="26" cy="253" r="5"/><circle cx="58" cy="253" r="5"/>
+              <circle cx="90" cy="253" r="5"/><circle cx="122" cy="253" r="5"/>
+              <circle cx="154" cy="253" r="5"/><circle cx="186" cy="253" r="5"/>
+              <circle cx="218" cy="253" r="5"/><circle cx="250" cy="253" r="5"/>
+            </g>
+            <text x="330" y="257" fill="#8a8a8e" letter-spacing="1.4">UTILITY · 96</text>
+          </g>
+
+          <!-- 残局 -->
+          <g class="lay" style="animation-delay:.41s">
+            <rect x="0" y="280" width="620" height="26" fill="#e8e8e9" fill-opacity=".02"/>
+            <g stroke="#e8e8e9" stroke-opacity=".5">
+              <rect x="18" y="287" width="10" height="10"/><rect x="38" y="287" width="10" height="10"/>
+              <rect x="58" y="287" width="10" height="10"/><rect x="78" y="287" width="10" height="10"/>
+            </g>
+            <text x="330" y="297" fill="#8a8a8e" letter-spacing="1.4">CLUTCH · 1v1 → 1v5</text>
+          </g>
+
+          <!-- 回放 -->
+          <g class="lay" style="animation-delay:.5s">
+            <rect x="0" y="320" width="620" height="26" fill="#e8e8e9" fill-opacity=".015"/>
+            <g stroke="#e8e8e9" stroke-opacity=".3">
+              <path d="M18 333 h48 M78 333 h32 M122 333 h64 M198 333 h26"/>
+            </g>
+            <text x="330" y="337" fill="#8a8a8e" letter-spacing="1.4">REPLAY · PER ROUND</text>
+          </g>
+        </g>
+
+        <!-- 切缝标注 -->
+        <g font-family="system-ui" font-size="10" fill="#5f5f63" letter-spacing="1.6">
+          <text x="316" y="60">CROSS-SECTION</text>
+          <path d="M310 68 v44" stroke="#5f5f63" stroke-opacity=".6"/>
+        </g>
+      </svg>
+      <div class="cap">同一份 demo · 六种切法</div>
+    </div>
+  </div>
+
+  <section id="what">
+    <div class="sec-h">
+      <span class="idx">01</span>
+      <h2>它是什么</h2>
+      <span class="note">不是教练工具，是给自己看的</span>
+    </div>
+    <div class="stats">
+      <div><b class="num">12</b><span>个数据集</span><u>ROUNDS / KILLS / DAMAGE / …</u></div>
+      <div><b class="num">8–15<span style="font-size:22px">秒</span></b><span>解析一场</span><u>180 MB · 20 回合</u></div>
+      <div><b class="num">1</b><span>个 SQLite 文件</span><u>拷走就是全部数据</u></div>
+      <div><b class="num">0</b><span>数据上传</span><u>唯一对外请求是查版本号</u></div>
+    </div>
+  </section>
+
+  <section id="feats">
+    <div class="sec-h">
+      <span class="idx">02</span>
+      <h2>切开来能看见什么</h2>
+      <span class="note">每个指标都能悬浮看公式</span>
+    </div>
+    <div class="feats">
+      <article>
+        <span class="tag">Overview</span>
+        <h3>概览与逐场趋势</h3>
+        <p>Rating 2.0、ADR、KAST、Impact、K/D、首杀率、补枪与拉枪占比。一场一场排开，看的是曲线，不是孤立的数字。</p>
+      </article>
+      <article>
+        <span class="tag">Ability</span>
+        <h3>能力画像</h3>
+        <p>从击杀、生存、残局、多杀这些事件里反推出的分维能力——长什么样、在变好还是在变差。</p>
+      </article>
+      <article>
+        <span class="tag">Weapons</span>
+        <h3>武器明细</h3>
+        <p>每把枪的击杀数、命中率、爆头率、每击杀耗弹。不是猜哪把枪手感好，是有数。</p>
+      </article>
+      <article>
+        <span class="tag">Clutch</span>
+        <h3>残局与多杀</h3>
+        <p>1v1 到 1v5 全部重建出来。awpy 的 clutch 字段是空的，这里按击杀事件流自己数存活人数。</p>
+      </article>
+      <article>
+        <span class="tag">Economy</span>
+        <h3>经济与道具</h3>
+        <p>每回合经济差、购买类型分档、起枪节奏；闪光致盲时长、烟雾与燃烧的覆盖与伤害。</p>
+      </article>
+      <article>
+        <span class="tag">Replay</span>
+        <h3>回合级回放</h3>
+        <p>四栏 HUD + 地图雷达 + 双轨回合轴。想再看一遍那个残局，不用回游戏。</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="privacy">
+    <div class="sec-h">
+      <span class="idx">03</span>
+      <h2>它不碰你的游戏</h2>
+      <span class="note">只读磁盘上的 .dem 文件</span>
+    </div>
+    <div class="two">
+      <div>
+        <p><strong>不读游戏进程、不注入、不修改任何游戏文件。</strong>它跟 CS2 客户端之间没有交互——不读内存、不 hook、不改文件，所以不存在接触面。但账号状态不由它保证，反作弊策略也不由它控制。</p>
+        <p>也不上传。程序只会发一个 GET 去 GitHub 公开 API 问「最新版本号是多少」——不带任何本地数据、不带 cookie、不含设备标识，返回结果只用来在版本号旁边显示一个 <code>NEW</code>。除此之外不往外发任何东西。</p>
+        <p>数据全部落在一个 SQLite 文件里。删掉程序目录就干净了——注册表、AppData、我的文档，什么都没有。</p>
+      </div>
+      <dl class="kv">
+        <div><dt>解析</dt><dd>awpy 3.1.1（开源，MIT）</dd></div>
+        <div><dt>存储</dt><dd><code>data/cs2.db</code></dd></div>
+        <div><dt>回放</dt><dd><code>data/replays/*.json</code></dd></div>
+        <div><dt>备份</dt><dd>拷走那一个 .db 文件</dd></div>
+        <div><dt>卸载</dt><dd>删文件夹</dd></div>
+        <div><dt>遥测</dt><dd>无</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section id="download">
+    <div class="sec-h">
+      <span class="idx">04</span>
+      <h2>拿一个走</h2>
+      <span class="note">v6.1 · Windows x64</span>
+    </div>
+    <div class="dl">
+      <a href="../../releases/latest">
+        <div class="k">Portable · 推荐</div>
+        <div class="n">便携版</div>
+        <div class="s">自带 Python 3.12 与全部依赖，解压双击 START.bat。不装 Python、不 pip、不联网。</div>
+        <div class="go">128 MB →</div>
+      </a>
+      <a href="../../releases/latest">
+        <div class="k">Source</div>
+        <div class="n">源码版</div>
+        <div class="s">需要 Python 3.10+ 与 <code>pip install -r requirements.txt</code>。想改代码看这里。</div>
+        <div class="go">4.7 MB →</div>
+      </a>
+    </div>
+    <p class="dl-notes">
+      第一次启动会在程序目录下建 <code>demos/</code> 和 <code>data/</code>。把 <code>.dem</code> 丢进 <code>demos/</code>，在 Demo 页点「分析未处理」，等 8–15 秒。<br>
+      升级：有新版本时版本号旁边会亮一个 <code>NEW</code>，点它去发布页。下载新包解压覆盖安装目录，<strong>但保留你自己的 <code>data/</code> 和 <code>demos/</code></strong>——解压到新目录再把旧 <code>data/</code> 搬过去最稳。
+    </p>
+
+    <p class="disclaim">
+      非官方工具，与 Valve Corporation 无任何关联、未获授权或背书。只读磁盘上的 <code>.dem</code>，不接触游戏进程、不注入、不提供任何游戏内优势，<strong>不是作弊工具</strong>；但<strong>不对任何账号状态作保证</strong>，风险自负。统计不保证与其他平台一致，仅供自我参考，不得用于赌博、投注、赛事裁决或职业选拔。<strong>下载或运行即视为接受 <a href="../../blob/main/DISCLAIMER.md">完整免责声明</a>。</strong>
+    </p>
+
+    <div class="support">
+      <div>
+        <h3>如果它帮到你</h3>
+        <p>这工具是给自己用着顺手才做的，然后才想到可以给别人。赞赏不是付费墙——所有功能都在包里，一分钱不花也能全用。愿意请一杯就请一杯。</p>
+      </div>
+      <a class="btn" href="#" data-donate>赞赏入口</a>
+    </div>
+  </section>
+
+  <footer>
+    <div class="cols">
+      <p>
+        Cross-Section 与 Valve Corporation 无关联，未获其授权或背书。Counter-Strike、CS2 及相关标识是 Valve Corporation 的商标。<br>
+        图标与地图雷达底图来自 CS2 客户端资源，版权归 Valve；解析引擎 <a href="https://github.com/pnxenopoulos/awpy">awpy</a>（MIT）。<br>
+        本工具只读 <code>.dem</code> 文件，不接触游戏进程。
+      </p>
+      <p style="text-align:right">
+        <a href="../../LICENSE">MIT License</a><br>
+        <a href="../../blob/main/DISCLAIMER.md">免责声明</a><br>
+        <a href="../../blob/main/CHANGELOG.md">Changelog</a><br>
+        <span class="num" style="color:#3f3f42">v6.1</span>
+      </p>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+(function () {
+  var xb = document.querySelector('.xb');
+  var alt = document.querySelector('.xb-alt');
+  if (!xb || !alt) return;
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  function fire() {
+    xb.classList.add('glitch');
+    alt.style.visibility = 'visible';
+    xb.querySelectorAll('.xb-c,.xb-m1,.xb-s,.xb-m2').forEach(function (e) {
+      e.style.visibility = 'hidden';
+    });
+    setTimeout(function () {
+      xb.classList.remove('glitch');
+      alt.style.visibility = 'hidden';
+      xb.querySelectorAll('.xb-c,.xb-m1,.xb-s,.xb-m2').forEach(function (e) {
+        e.style.visibility = '';
+      });
+      setTimeout(fire, 14000 + Math.random() * 12000);
+    }, 840);
+  }
+  setTimeout(fire, 9000 + Math.random() * 5000);
+})();
+</script>
+</html>

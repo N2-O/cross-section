@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320" role="img" aria-label="Cross-Section">
+  <defs>
+    <style>
+      .bg   { fill: #0d0d0e; }
+      .grid { stroke: #1a1a1c; stroke-width: 1; }
+      .big  { font: 700 132px/1 system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+              fill: #e8e8e9; letter-spacing: -0.02em; }
+      .sub  { font: 500 21px/1 system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+              fill: #8a8a8e; letter-spacing: 0.44em; }
+      .tag  { font: 400 15px/1 system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+              fill: #6f6f73; letter-spacing: 0.16em; }
+      .mono { font: 400 13px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+              fill: #55565a; letter-spacing: 0.08em; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1280" height="320"/>
+
+  <!-- 极淡网格：像剖面图纸 -->
+  <g class="grid" opacity=".5">
+    <path d="M0 80 H1280 M0 160 H1280 M0 240 H1280"/>
+    <path d="M320 0 V320 M640 0 V320 M960 0 V320"/>
+  </g>
+
+  <!-- 左：CS 字标 -->
+  <text class="big" x="88" y="196">CS</text>
+
+  <!-- 中：全名 + 中文 -->
+  <text class="sub" x="330" y="176">CROSS-SECTION</text>
+  <text class="tag" x="332" y="212">把每一场对局切开看横截面</text>
+
+  <!-- 右：状态栏（数据面板的语感） -->
+  <g>
+    <text class="mono" x="952" y="150">LOCAL ONLY</text>
+    <text class="mono" x="952" y="174">NO UPLOAD</text>
+    <text class="mono" x="952" y="198">SQLITE · 1 FILE</text>
+  </g>
+
+  <!-- 底部细线 + 梗 -->
+  <path d="M88 268 H1192" stroke="#2c2d2f" stroke-width="1"/>
+  <text class="mono" x="88" y="294" opacity=".85">COUNTER-STRIKE</text>
+  <text class="mono" x="1192" y="294" text-anchor="end" opacity=".55">v6.1</text>
+</svg>

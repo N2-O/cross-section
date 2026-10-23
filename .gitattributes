@@ -1,0 +1,31 @@
+# 换行符：Windows 批处理必须是 CRLF，否则在 cmd 里会出诡异问题
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.vbs   text eol=crlf
+
+# 代码与文档统一 LF
+*.py    text eol=lf
+*.js    text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.md    text eol=lf
+*.json  text eol=lf
+*.svg   text eol=lf
+更新说明.txt  text eol=crlf
+requirements.txt text eol=lf
+
+# 二进制：不要让 git 试图合并或转换
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.ico   binary
+*.zip   binary
+*.exe   binary
+*.dll   binary
+*.pyd   binary
+*.dem   binary
+
+# GitHub 语言统计：把 web/ 下的静态资源排除在「源码」之外
+cs2tool/web/icons/**  linguist-vendored
+cs2tool/web/maps/**   linguist-vendored
+cs2tool/web/bg.jpg    linguist-vendored

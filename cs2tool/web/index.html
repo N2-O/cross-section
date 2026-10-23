@@ -1,0 +1,509 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>Cross-Section</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+/* ===== 单页版 ===== */
+#anchors{display:flex;align-items:center;gap:1px;flex-wrap:wrap;
+  padding:0 max(20px,calc((100vw - 1760px)/2));
+  border-bottom:1px solid var(--line);background:rgba(13,13,14,.82);
+  backdrop-filter:blur(16px);position:sticky;top:57px;z-index:4}
+#anchors a{padding:9px 13px;font-size:12px;color:var(--dim);cursor:pointer;
+  border-bottom:2px solid transparent;transition:color .13s,border-color .13s;white-space:nowrap}
+#anchors a:hover{color:var(--txt)}
+#anchors a.on{color:var(--txt);border-bottom-color:var(--acc)}
+#anchors .sp{flex:1}
+/* ===== 分节：大标题 + 悬挂序号 + 渐变引导线 ===== */
+.wrap{counter-reset:sec}
+.sec{counter-increment:sec;position:relative;margin-bottom:48px;padding-top:6px;
+  scroll-margin-top:104px}
+.sec>h2{display:flex;align-items:center;gap:14px;position:relative;
+  font-size:23px;font-weight:600;letter-spacing:-.015em;color:var(--txt);
+  text-transform:none;margin:0 0 18px;padding:0;line-height:1.2}
+/* 悬挂序号：19px，向左溢出正文左边界 22px */
+.sec>h2::before{content:counter(sec,decimal-leading-zero);
+  position:absolute;left:-30px;top:50%;transform:translateY(-50%);
+  font-size:19px;font-weight:600;color:var(--acc);opacity:.5;
+  font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1;
+  pointer-events:none}
+/* 右侧延伸线，把标题和功能区隔开 */
+.sec>h2::after{content:'';order:1;flex:1;height:1px;min-width:24px;
+  background:linear-gradient(to right,rgba(255,255,255,.13),rgba(255,255,255,0))}
+.sec>h2 .r{order:2;flex:none;font-size:12px;font-weight:400;color:var(--dim);
+  letter-spacing:0;text-transform:none;margin-left:0}
+/* 卡片标题降级成小标签，和段标题拉开层级 */
+.card>h2{font-size:11.5px;font-weight:500;color:var(--dim);
+  letter-spacing:.07em;text-transform:uppercase}
+.hero{display:grid;gap:12px;align-items:end}
+#ovHero{grid-template-columns:repeat(3,1fr)}
+#ovHero .kpi{padding:16px 20px}
+#ovHero .kpi .v{font-size:27px}
+/* 指标条：无边，选中加衬底 */
+#ratingRow{display:flex;gap:2px;margin-top:12px;background:rgba(9,9,11,.46);
+  padding:6px 10px;
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+#ratingRow .ri{flex:1;padding:13px 18px;cursor:pointer;transition:background .13s;
+  border-radius:0;min-width:0}
+#ratingRow .ri:hover{background:rgba(255,255,255,.032)}
+#ratingRow .ri .k{font-size:12.5px;color:var(--dim);white-space:nowrap;letter-spacing:.02em}
+#ratingRow .ri .v{font-size:27px;font-variant-numeric:tabular-nums;margin-top:2px;
+  font-family:inherit;font-weight:550;line-height:1.15;letter-spacing:-.01em}
+#ratingRow .ri.on{background:rgba(255,255,255,.085)}
+#ratingRow .ri.on .k{color:var(--txt)}
+#ratingRow .ri.on .v{color:#fff}
+#trTitle{font-size:17px;font-weight:650;margin:0 0 6px;padding-left:2px}
+#trTitle .n{font-size:12px;font-weight:400;color:var(--dim);margin-left:8px}
+/* 平均：一行放完，8 列 */
+#pgRow{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;
+  background:rgba(9,9,11,.46);padding:6px 10px;
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+#pgRow .ri{padding:11px 14px;border-radius:0}
+#pgRow .ri .k{font-size:11.5px;color:var(--dim);white-space:nowrap}
+#pgRow .ri .v{font-size:22px;font-variant-numeric:tabular-nums;margin-top:1px;
+  font-family:inherit;font-weight:550}
+#pgRow .ri .s{font-size:10.5px;color:var(--dim);opacity:.65;margin-top:1px}
+#sideSel{font-size:13px;font-weight:700;cursor:pointer;user-select:none;
+  display:inline-flex;gap:9px;align-items:center}
+#sideSel span{color:var(--dim);transition:color .13s}
+#sideSel span.on{color:var(--txt)}
+#sideSel .sep{color:rgba(255,255,255,.22);font-weight:400}
+/* 受闪面板的阵营切换：选中项加粗加大，跟着 02 平均那套 */
+#recvSide{font-size:13px;font-weight:700;cursor:pointer;user-select:none;
+  display:inline-flex;gap:9px;align-items:baseline}
+#recvSide span{color:var(--dim);
+  transition:color .13s,font-size .13s,font-weight .13s}
+#recvSide span.on{color:var(--txt);font-size:16px;font-weight:800}
+#recvSide .sep{color:rgba(255,255,255,.22);font-weight:400}
+/* 受闪面板分两行：闪光弹 / 道具伤害 */
+.rcvrow{display:grid;grid-template-columns:66px minmax(0,1fr);
+  gap:14px;align-items:start}
+.rcvrow + .rcvrow{margin-top:16px;padding-top:16px;
+  border-top:1px solid rgba(255,255,255,.07)}
+.rcvlb{font-size:11.5px;color:var(--dim);letter-spacing:.1em;padding-top:9px}
+/* 武器：‹ 名字 › 切换 + 大卡片 */
+.wpick{display:flex;align-items:center;gap:14px;margin-bottom:12px}
+.wpick button{width:38px;height:38px;font-size:20px;line-height:1;padding:0;
+  border-radius:50%;background:rgba(255,255,255,.045);border:1px solid var(--line)}
+.wpick button:hover:not(:disabled){background:rgba(255,255,255,.09);border-color:var(--acc)}
+.wpick .wname{font-size:19px;font-weight:650;min-width:130px;text-align:center}
+.wpick .wcount{font-size:12px;color:var(--dim)}
+.wbig{position:relative;border:1px solid var(--line);border-radius:0;
+  min-height:172px;padding:20px 24px;overflow:hidden;
+  background:rgba(9,9,11,.50);
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+  /* 左侧只放「击杀数 + 两行小字」，给固定宽度就够；剩下的全给右侧指标列。
+     原来写 1fr / 1.7fr，左侧内容很少却占掉约四成，右侧 8 列被压到每列 117px。
+     注意别为了某几个指标单独调宽度，整体让位即可。 */
+  display:grid;grid-template-columns:190px minmax(0,1fr);gap:28px;align-items:center}
+/* 武器图：固定高度、靠右上，不受宽高比影响 */
+.wbig .art{position:absolute;top:14px;right:18px;width:300px;height:104px;
+  background-size:contain;background-position:right top;
+  background-repeat:no-repeat;opacity:.13;pointer-events:none}
+.wbig .main{position:relative;min-width:0}
+.wbig .main .nm{font-size:12.5px;color:var(--dim);margin-bottom:4px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wbig .main .kills{font-size:50px;font-weight:650;line-height:1.05;
+  font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.wbig .main .sub{font-size:12px;color:var(--dim);margin-top:4px}
+.wbig .stats{position:relative;display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.wbig .stats .s{min-width:0}
+.wbig .stats .s .k{font-size:11px;color:var(--dim);white-space:nowrap}
+.wbig .stats .s .v{font-size:21px;font-variant-numeric:tabular-nums;font-weight:550;margin-top:2px}
+.wbig .stats .s .x{font-size:10px;color:var(--dim);opacity:.7;margin-top:1px}
+/* 环形图 + 口径说明 */
+#rsDonut{display:flex;gap:34px;align-items:center;flex-wrap:wrap}
+/* 07 结束原因：环形图在左、明细表在右并排；表格不再横跨整页顶满 */
+.reasonGrid{display:grid;grid-template-columns:auto minmax(0,1fr);
+  gap:34px;align-items:start}
+.reasonGrid #rsDonut{flex-direction:row;align-items:center;gap:28px;flex-wrap:nowrap}
+.reasonGrid #rsDonut .legend{min-width:180px;width:auto}
+.reasonGrid #evReason{min-width:0;padding-top:6px}
+.reasonGrid #evReason .tb{max-width:100%}
+/* 08 花费构成：上排「阵营+总额」与图例并排，条独占下一行 */
+#ecMix{display:flex;flex-direction:column;gap:22px}
+.mixRow{display:flex;flex-direction:column;gap:9px}
+.mixHead{display:flex;align-items:center;justify-content:space-between;gap:24px}
+.mixRow .side{font-size:12.5px;letter-spacing:.06em;color:var(--dim);
+  font-variant-numeric:tabular-nums;flex:none}
+.mixRow .side b{font-size:15px;color:var(--txt);font-weight:600;margin-left:9px}
+/* 缝隙必须透「稳定底色」，不能透背后的动态烟雾——
+   否则每个 gap 看到的背景明暗不一还在流动，会让人误以为色块在浮动、
+   高度不齐（实际高度都是 100%）。所以这里铺一层不透明底。 */
+.mixBar{display:flex;gap:3px;height:26px;width:100%;border-radius:0;overflow:hidden;
+  background:rgba(0,0,0,.72);align-items:stretch}
+/* 用 flex-grow 按比例分空间，而不是写死 width——否则 gap 会额外撑出宽度。 */
+.mixBar i{display:block;height:100%;border-radius:0;min-width:2px;
+  flex-grow:0;flex-shrink:1;flex-basis:0}
+.mixLeg{display:flex;flex-wrap:wrap;gap:5px 18px;font-size:11px;color:var(--dim);
+  justify-content:flex-end}
+.mixLeg span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.mixLeg em{width:9px;height:9px;border-radius:0;display:inline-block;flex:none}
+.mixLeg u{text-decoration:none;color:var(--txt);font-variant-numeric:tabular-nums;
+  font-size:11px}
+#rsDonut .ring{position:relative;flex:none}
+#rsDonut .donut-svg{display:block}
+#rsDonut .spin{animation:donutSpin 96s linear infinite}
+@keyframes donutSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+#rsDonut .legend{display:flex;flex-direction:column;gap:8px;font-size:13px;min-width:210px}
+#rsDonut .legend .li{display:flex;align-items:center;gap:9px}
+#rsDonut .legend .dot{width:10px;height:10px;border-radius:1px;flex:none}
+#rsDonut .legend .n{color:var(--dim);font-variant-numeric:tabular-nums;margin-left:auto;
+  min-width:44px;text-align:right}
+#rsDonut .legend b{margin-left:8px;font-weight:600;font-variant-numeric:tabular-nums}
+.ric{width:14px;height:14px;vertical-align:-2px;margin-right:5px}
+/* 页脚：极小，只作为入口 + 声明 */
+#foot{margin-top:64px;padding:20px 0 8px;border-top:1px solid rgba(255,255,255,.05);
+  text-align:center}
+#foot .fline{font-size:10.5px;color:var(--dim);opacity:.55;display:flex;gap:8px;
+  align-items:center;justify-content:center;flex-wrap:wrap}
+#foot a{color:var(--dim);font-size:10.5px}
+#foot a:hover{color:var(--txt);opacity:1}
+#foot .sep{opacity:.4}
+#foot .fdis{margin:12px auto 0;max-width:860px;font-size:11px;line-height:1.9;
+  color:var(--dim);opacity:.62;letter-spacing:.01em}
+#foot .fdis span{display:block}
+#foot .fdis span+span{margin-top:2px}
+#foot .fdis code{font-size:10.5px;background:none;padding:0}
+/* 道具：五个独立面板 */
+.utilgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.ucard{position:relative;border:1px solid var(--line);padding:16px 18px 18px;overflow:hidden;
+  background:rgba(9,9,11,.5);
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.ucard .art{position:absolute;top:10px;right:12px;width:74px;height:52px;
+  background-size:contain;background-position:right top;background-repeat:no-repeat;
+  opacity:.12;pointer-events:none}
+.ucard .un{font-size:13px;font-weight:600;margin-bottom:12px;position:relative}
+.ucard .ur{display:flex;justify-content:space-between;align-items:baseline;
+  padding:6px 0;border-bottom:1px solid rgba(255,255,255,.045);position:relative}
+.ucard .ur:last-child{border-bottom:0}
+.ucard .ur .k{font-size:11px;color:var(--dim)}
+.ucard .ur .v{font-size:17px;font-variant-numeric:tabular-nums;font-weight:550}
+.ucard .ur .k .dim2{opacity:.55;font-size:11px;margin-left:3px}
+.ucard .ur.big .v{font-size:21px}
+@media(max-width:1400px){.utilgrid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:900px){.utilgrid{grid-template-columns:repeat(2,1fr)}}
+.qm{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;
+  border:1px solid var(--line);border-radius:50%;font-size:11px;color:var(--dim);
+  cursor:help;line-height:1}
+.qm:hover{border-color:var(--acc);color:var(--txt)}
+.qnote{margin-top:12px;padding:11px 14px;border-left:2px solid var(--acc);
+  background:rgba(255,255,255,.03);font-size:12px;line-height:1.7;color:var(--dim)}
+/* 表 */
+.tb{width:100%;border-collapse:collapse;font-size:12.5px}
+.tb th{text-align:left;font-weight:500;color:var(--dim);font-size:11px;
+  padding:7px 9px;border-bottom:1px solid var(--line);white-space:nowrap}
+.tb td{padding:7px 9px;border-bottom:1px solid rgba(255,255,255,.045)}
+.tb tr:last-child td{border-bottom:0}
+.tb tr:hover td{background:rgba(255,255,255,.028)}
+.tb .num{text-align:right;font-variant-numeric:tabular-nums;
+  font-family:inherit}
+.tb .w{color:var(--ok)}.tb .l{color:var(--bad)}.tb .m{color:var(--dim)}
+.mb{display:inline-block;height:5px;border-radius:3px;background:var(--acc);opacity:.5;
+  vertical-align:middle;min-width:2px}
+.mbtr{width:70px;background:rgba(255,255,255,.07);border-radius:3px;display:inline-block;
+  height:5px;vertical-align:middle;overflow:hidden}
+.mbtr i.neg{background:var(--bad)}
+/* 08 逐场花费：这张卡里的横条要撑满整列、加粗，否则 70px×5px 看着根本不像图 */
+#ecSpend{display:flex;flex-direction:column;gap:9px}
+#ecSpend .bar{grid-template-columns:118px 1fr 126px;font-size:12.5px;gap:12px}
+#ecSpend .mbtr{width:100%!important;height:9px!important;border-radius:0!important;
+  display:block!important;background:rgba(255,255,255,.055)!important}
+#ecSpend .mbtr .mb{height:9px!important;border-radius:0!important;opacity:.85!important;
+  min-width:2px;display:block}
+#ecSpend .val{white-space:nowrap}
+#ecSpend .val .pct{display:inline-block;min-width:52px;text-align:right}
+.nil{color:var(--dim);font-size:12.5px;padding:18px 0;text-align:center}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.row3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:1200px){#ovHero{grid-template-columns:1fr}#pgRow{grid-template-columns:repeat(4,1fr)}
+  .row2,.row3{grid-template-columns:1fr}}
+/* 点击行打开回合详情的提示 */
+.tb tbody tr.clickable{cursor:pointer}
+.tb tbody tr.clickable:hover td{background:rgba(255,255,255,.05)}
+/* ===== 排版基准：四档字号，全站只用这四档 ===== */
+:root{--f-hero:27px;--f-big:21px;--f-mid:13px;--f-cap:11px}
+/* 指标组：内部项目一律等分并列，不折行 */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:0;
+  background:rgba(9,9,11,.46);padding:14px 18px;
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.kpis.k2{grid-template-columns:repeat(auto-fit,minmax(0,1fr))}
+.kpi{padding:0 14px;border-left:1px solid rgba(255,255,255,.07)}
+.kpi:first-child{border-left:0;padding-left:0}
+.kline{display:grid;grid-template-columns:96px 1fr;gap:12px;align-items:center}
+.klab{font-size:var(--f-cap);color:var(--dim);letter-spacing:.05em;white-space:nowrap}
+.sec>h2{font-size:var(--f-mid)}
+.sec>h2 .r{font-size:var(--f-cap)}
+#trTitle{font-size:17px}
+.tb{font-size:var(--f-mid)}
+.tb th{font-size:var(--f-cap)}
+.kpi .v{font-size:var(--f-big)}
+.kpi .l,.kpi .s{font-size:var(--f-cap)}
+</style>
+
+<canvas id="smoke"></canvas>
+<div id="mtip"></div>
+<div id="veil"></div>
+
+<div id="top">
+  <h1><span class="xb" data-alt="Counter-Strike" aria-label="Cross-Section">
+    <span class="xb-c">C</span><span class="xb-m1">ross-</span><span class="xb-s">S</span><span class="xb-m2">ection</span>
+    <span class="xb-alt" aria-hidden="true">Counter-Strike</span>
+  </span> <span id="ver" style="font-size:11px;font-weight:500;color:var(--dim)"></span></h1>
+  <span style="flex:1"></span>
+  <span id="job"><span id="jobtext">解析中…</span><span class="prog"><i id="progbar"></i></span></span>
+  <select id="player" title="选择「我」是谁"></select>
+  <button id="btnExport">导出 CSV</button>
+  <button id="btnSettings">⚙ 设置</button>
+</div>
+
+<div id="anchors">
+  <a data-s="s-overview" class="on">概览</a>
+  <a data-s="s-avg">平均</a>
+  <a data-s="s-weapons">武器</a>
+  <a data-s="s-events">回合事件</a>
+  <a data-s="s-clutch">多杀残局</a>
+  <a data-s="s-reason">结束原因</a>
+  <a data-s="s-maps">地图数据</a>
+  <a data-s="s-econ">经济</a>
+  <a data-s="s-util">道具</a>
+  <a data-s="s-pool">图池</a>
+  <span class="sp"></span>
+  <a href="/demos.html">Demo →</a>
+</div>
+
+<div class="wrap">
+
+  <!-- 概览 -->
+  <section class="sec" id="s-overview">
+    <h2>概览 <span class="r" id="ovSub"></span></h2>
+    <div class="hero" id="ovHero"></div>
+    <div id="ratingRow"></div>
+    <div class="card" style="margin-top:12px">
+      <div class="bd"><div id="trChart"></div></div>
+    </div>
+  </section>
+
+  <!-- 平均 -->
+  <section class="sec" id="s-avg">
+    <h2>平均
+      <span class="r">
+        <span id="sideSel">
+          <span data-side="" class="on">全部</span><span class="sep">|</span><span data-side="CT">CT</span><span class="sep">|</span><span data-side="T">T</span>
+        </span>
+      </span>
+    </h2>
+    <div id="pgRow"></div>
+  </section>
+
+  <!-- 武器 -->
+  <section class="sec" id="s-weapons">
+    <h2>武器</h2>
+    <div class="wpick">
+      <button id="wPrev" title="上一把">‹</button>
+      <div class="wname" id="wName">—</div>
+      <button id="wNext" title="下一把">›</button>
+      <span class="wcount" id="wCount"></span>
+    </div>
+    <div class="wbig" id="wBig"></div>
+    <div class="card" style="margin-top:12px">
+      <h2>枪法效率与特殊击杀</h2>
+      <div class="bd">
+        <div class="kline">
+          <div class="klab">枪法效率</div>
+          <div id="wShoot" class="kpis"></div>
+        </div>
+        <div class="kline" style="border-top:1px solid rgba(255,255,255,.05);padding-top:12px">
+          <div class="klab">特殊击杀</div>
+          <div id="wSpecial" class="kpis"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 回合事件 -->
+  <section class="sec" id="s-events">
+    <h2>回合事件</h2>
+    <div class="row3">
+      <div class="card"><h2>首杀</h2><div class="bd"><div id="evOpen" class="kpis k2"></div></div></div>
+      <div class="card"><h2>补枪</h2><div class="bd"><div id="evTrade" class="kpis k2"></div></div></div>
+      <div class="card"><h2>拉枪</h2><div class="bd"><div id="evPulled" class="kpis k2"></div></div></div>
+    </div>
+  </section>
+
+  <!-- 多杀残局 -->
+  <section class="sec" id="s-clutch">
+    <h2>多杀与残局</h2>
+    <div class="card">
+      <h2>多杀</h2>
+      <div class="bd">
+        <div id="mkLead"></div>
+        <div id="mkRow" class="kpis" style="margin-top:12px"></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h2>残局</h2>
+      <div class="bd">
+        <div id="clRow" class="kpis"></div>
+        <div style="margin-top:14px"><div id="clSave" class="kpis"></div></div>
+        <div style="margin-top:18px" id="clSizes"></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px"><h2>人数优势与翻盘</h2>
+      <div class="bd"><div id="advRow" class="kpis"></div></div></div>
+  </section>
+
+  <!-- 回合结束原因 -->
+  <section class="sec" id="s-reason">
+    <h2>回合结束原因
+      <span class="r"><span class="qm" id="rqBtn" title="口径说明">?</span></span>
+    </h2>
+    <div class="card"><div class="bd">
+      <div class="reasonGrid">
+        <div id="rsDonut"></div>
+        <div id="evReason"></div>
+      </div>
+      <div id="rqNote" class="qnote" style="display:none">
+        这张图统计的是**全部对局里每个回合的结束方式**（双方合计），
+        不分是谁赢的。它和「个人回合胜率」不是一回事：
+        你所在队伍的胜率只看你参与的那 5 场，而这里统计的是回合结果分布，
+        包含对手获胜的回合。两者不必相等。
+      </div>
+    </div></div>
+  </section>
+
+  <!-- 地图数据 -->
+  <section class="sec" id="s-maps">
+    <h2>地图数据</h2>
+    <div class="card"><div class="bd np"><div id="mpTable"></div></div></div>
+  </section>
+
+  <!-- 经济 -->
+  <section class="sec" id="s-econ">
+    <h2>经济</h2>
+    <div class="hero" id="ecHero" style="grid-template-columns:repeat(4,1fr)"></div>
+    <div class="card" style="margin-top:14px"><h2>花费构成（CT / T 分别）
+      <span class="r"><span class="qm" id="mxBtn" title="口径说明">?</span></span>
+    </h2>
+      <div class="bd">
+        <div id="mxNote" class="qnote" style="display:none">
+          武器和道具的钱来自购买事件的精确金额，按武器名归类。<br>
+          <b>甲不是直接读到的</b>——购买事件里不含护甲，这里的甲是「本回合实际花掉的现金」减去「已知买到的武器道具」倒推出来的残差，所以可能混进极少量的其他漏计项。<br>
+          钳子按 <code>m_bPawnHasDefuser</code> 由无到有的次数 × $400 计，只有 CT 会有这一项。<br>
+          步枪类不含狙击枪；机枪（Negev / M249）和霰弹枪合并成一类。
+        </div>
+        <div id="ecMix"></div>
+      </div></div>
+    <div class="row2" style="margin-top:14px">
+      <div class="card"><h2>购买类型胜率</h2><div class="bd np"><div id="ecBuy"></div></div></div>
+      <div class="card"><h2>逐场花费</h2><div class="bd"><div id="ecSpend"></div></div></div>
+    </div>
+  </section>
+
+  <!-- 道具 -->
+  <section class="sec" id="s-util">
+    <h2>道具</h2>
+    <div class="utilgrid" id="utGrid"></div>
+    <div class="card" style="margin-top:14px">
+      <h2>受闪与受道具伤害
+        <span class="r">
+          <span id="recvSide">
+            <span data-s="all" class="on">全部</span><span class="sep">|</span><span data-s="T">T</span><span class="sep">|</span><span data-s="CT">CT</span>
+          </span>
+        </span>
+      </h2>
+      <div class="bd">
+        <div class="rcvrow">
+          <span class="rcvlb">闪光弹</span>
+          <div class="kpis" id="recvKpis"></div>
+        </div>
+        <div class="rcvrow">
+          <span class="rcvlb">道具伤害</span>
+          <div class="kpis" id="recvKpis2"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 图池 -->
+  <section class="sec" id="s-pool">
+    <h2>图池 <span class="r muted">游玩场次 · 胜率 · 环比</span></h2>
+    <div class="card"><div class="bd np"><div id="poolTable"></div></div></div>
+  </section>
+
+  <!-- 页脚：来源与引用说明 -->
+  <footer id="foot">
+    <div class="fline">
+      <a href="/about.html">简介 · 使用说明</a>
+      <span class="sep">·</span>
+      <span>QQ 1470232252</span>
+      <span class="sep">·</span>
+      <span id="footVer"></span>
+    </div>
+    <p class="fdis">
+      <span>基于 <b>awpy 3.1.1</b>（MIT License）构建，demo 解析层由 awpy 提供</span>
+      <span>统计口径参考 HLTV 公开公式（Rating 2.0 / Impact / KAST / ADR）</span>
+      <span>指标计算、前端界面与本地服务为本项目自研</span>
+    </p>
+  </footer>
+
+</div>
+
+<!-- 设置弹层 -->
+<div class="modal" id="settings">
+  <div class="mbox" style="width:min(680px,94vw)">
+    <h3>设置 <span class="x" id="setClose">✕</span></h3>
+    <div class="mbody">
+      <div class="msec">文件与目录</div>
+      <label class="fld"><span>Demo 目录</span>
+        <div class="row"><input id="setDemos" spellcheck="false"></div></label>
+      <label class="fld"><span>CS2 安装目录</span>
+        <div class="row"><input id="setCs2" spellcheck="false" placeholder="留空自动探测"></div>
+        <small>读地图雷达参数用。当前：<span id="ovDir">—</span>（<span id="ovCount">0</span> 张图）</small></label>
+      <label class="fld"><span>数据目录</span>
+        <div class="row"><input id="setData" spellcheck="false"></div></label>
+
+      <div class="msec">Steam 账号 · 自动拉取官匹 demo</div>
+      <label class="fld"><span>Steam Web API Key</span>
+        <div class="row"><input id="setKey" type="password" spellcheck="false" placeholder="32 位十六进制"></div>
+        <small>去 <a href="https://steamcommunity.com/dev/apikey" target="_blank" rel="noopener"><code>steamcommunity.com/dev/apikey</code></a> 生成，域名填 <code>localhost</code>。只读权限，不能登录或交易。</small></label>
+      <label class="fld"><span>游戏认证码</span>
+        <div class="row"><input id="setAuth" spellcheck="false" placeholder="例如 ABCD1-23456-7890A"></div>
+        <small>去 <a href="https://help.steampowered.com/zh-cn/wizard/HelpWithGameIssue/?appid=730&issueid=128" target="_blank" rel="noopener"><code>https://help.steampowered.com/zh-cn/wizard/HelpWithGameIssue/?appid=730&amp;issueid=128</code></a><br>
+        （需先登录 Steam，页面标题 Game Authentication Codes）→ 点 <b>Create Authentication Code</b> → 得到 <code>XXXX-XXXXX-XXXX</code>。<br>
+        只能读比赛历史，不能登录、不能交易；<b>有效期约 24 小时</b>，过期回这页重点一次。</small></label>
+      <label class="fld"><span>SteamID64</span>
+        <div class="row"><input id="setSid" spellcheck="false" placeholder="7656119…"></div>
+        <small>可以直接粘贴个人资料链接（会自动取出数字）。<b>它决定哪些比赛算「你的」</b>，没有它分不出队友/敌人。</small></label>
+      <label class="fld"><span>已处理到的分享码</span>
+        <div class="row"><input id="setStart" spellcheck="false" placeholder="CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"></div>
+        <small>同一个页面上「你最近完成的比赛令牌」就是它。也可以从 CS2 里 <b>Watch → Your Matches</b> 拷。拉取脚本从这里往后找新比赛，每跑一次自动推进。<br>
+        <b>必须是最近一个月内的</b>——Steam 只接受一个月内的分享码当起点。<b>只能往后拉</b>，Steam 没有反方向的接口。</small></label>
+      <label class="fld"><span>自动检查</span>
+        <div class="row" style="gap:8px;align-items:center">
+          <input id="setAutoPull" type="number" min="0" max="72" step="1" value="0" style="flex:0 0 80px">
+          <span style="font-size:12px;color:var(--dim)">小时一次，0 = 关闭</span>
+        </div>
+        <small>到点自动跑一次拉取，有新比赛会生成下载清单并在 Demo 页显示。<b>不会自动启动 CS2</b>。</small></label>
+
+      <div class="msec">数据</div>
+      <label class="fld"><span>玩家最少场次</span>
+        <div class="row" style="gap:10px;align-items:center">
+          <input type="range" id="setMinM" min="0" max="20" step="1" value="1" style="flex:1 1 auto">
+          <b id="setMinMV" style="min-width:1.8em;text-align:right;font-variant-numeric:tabular-nums">1</b>
+        </div>
+        <small>玩家下拉里只列出现 ≥ 该场次的玩家。设 <b>0</b> = 全部（含只打过一场的路人），调高可滤掉样本不足的。不影响你自己，你的记录永远保留。默认 <b>1</b>；demo 少的时候调高会让下拉里几乎没人可选。</small></label>
+
+      <div class="msec">外观</div>
+      <label class="fld"><span>烟雾特效</span>
+        <div class="row"><label class="sw"><input type="checkbox" id="setSmoke" checked> 整页烟雾背景</label></div></label>
+      <label class="fld"><span>指标说明</span>
+        <div class="row"><label class="sw"><input type="checkbox" id="setTip" checked> 悬浮在指标名称上显示定义与公式</label></div></label>
+      <label class="fld"><span>主题色</span>
+        <div class="row"><input type="color" id="setTint" value="#060607"></div></label>
+      <div class="mfoot"><span class="hint" id="setHint"></span><button class="pri" id="setSave">保存</button></div>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+<script src="/smoke.js"></script>
+<script src="/brand.js"></script>

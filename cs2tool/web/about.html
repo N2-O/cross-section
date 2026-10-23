@@ -1,0 +1,613 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>说明 · Cross-Section</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+/* ===== 文档页：左侧分组目录 + 右侧逐章正文 ===== */
+*{box-sizing:border-box}
+body{margin:0}
+.doc{display:grid;grid-template-columns:252px minmax(0,1fr);gap:0;
+  max-width:1500px;margin:0 auto;padding:0 24px}
+/* 侧栏 */
+.side{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;
+  padding:26px 18px 60px 4px;border-right:1px solid rgba(255,255,255,.06)}
+.side::-webkit-scrollbar{width:3px}
+.side::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12)}
+.side .brand{font-size:15px;font-weight:650;margin-bottom:4px}
+.side .brand>.brand-ver{font-size:10.5px;font-weight:400;color:var(--dim);margin-left:5px}
+.side .grp{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--dim);opacity:.6;margin:20px 0 7px;padding-left:10px}
+.side a{display:block;font-size:12.5px;color:var(--dim);padding:5px 10px;
+  border-left:2px solid transparent;line-height:1.45}
+.side a:hover{color:var(--txt)}
+.side a.on{color:var(--txt);border-left-color:var(--acc);background:rgba(255,255,255,.035)}
+.side .back{margin-top:24px;font-size:11.5px}
+/* 正文 */
+.body{padding:26px 0 120px 44px;max-width:900px;position:relative}
+.body::before{content:'';position:fixed;inset:0;background:rgba(6,6,7,.55);
+  z-index:-1;pointer-events:none}
+.body section{margin-bottom:56px;scroll-margin-top:24px}
+.body h2{font-size:24px;font-weight:600;letter-spacing:-.01em;margin:0 0 6px;
+  display:flex;align-items:baseline;gap:11px}
+.body h2 .num{font-size:12px;color:var(--acc);opacity:.6;
+  font-variant-numeric:tabular-nums;letter-spacing:.06em}
+.body .lead{color:var(--dim);font-size:13px;margin:0 0 20px;line-height:1.7}
+.body h3{font-size:15px;font-weight:600;margin:26px 0 9px}
+.body p{font-size:13px;line-height:1.85;margin:0 0 11px}
+.body ul,.body ol{font-size:13px;line-height:1.9;margin:0 0 12px;padding-left:20px}
+.body li{margin-bottom:3px}
+.body code{font-size:12px;background:rgba(255,255,255,.06);padding:1px 5px;
+  border-radius:2px;font-family:inherit}
+.body b{font-weight:600}
+/* 表格 */
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;margin:12px 0 16px}
+.dt th{text-align:left;font-weight:500;font-size:11px;color:var(--dim);
+  padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.1);white-space:nowrap}
+.dt td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.045);
+  vertical-align:top;line-height:1.6}
+.dt td:first-child{white-space:nowrap;color:var(--txt)}
+.dt .n{text-align:right;font-variant-numeric:tabular-nums}
+/* 提示条 */
+.tip{border-left:2px solid var(--acc);background:rgba(255,255,255,.03);
+  padding:11px 14px;font-size:12.5px;line-height:1.75;margin:14px 0;color:var(--dim)}
+.tip b{color:var(--txt)}
+/* 示意图：纯 CSS 画，不用截图 */
+.fig{border:1px solid rgba(255,255,255,.09);padding:14px;margin:14px 0;
+  background:rgba(255,255,255,.015)}
+.fig .cap{font-size:11px;color:var(--dim);margin-top:9px;opacity:.75}
+.fig .bar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.fig .chip{font-size:10.5px;border:1px solid rgba(255,255,255,.14);
+  padding:2px 8px;color:var(--dim)}
+.fig .chip.on{border-color:var(--acc);color:var(--txt)}
+.fig .tbl{display:grid;gap:2px;font-size:10.5px}
+.fig .tbl .r{display:grid;grid-template-columns:1.4fr repeat(4,1fr);gap:2px}
+.fig .tbl .c{padding:4px 6px;background:rgba(255,255,255,.03);color:var(--dim);
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.fig .tbl .r:first-child .c{background:rgba(255,255,255,.06);color:var(--txt)}
+.fig .cols{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.fig .cols .c{padding:14px 8px;text-align:center;font-size:10.5px;color:var(--dim);
+  border:1px solid rgba(255,255,255,.08)}
+@media(max-width:900px){
+  .doc{grid-template-columns:1fr}
+  .side{position:static;height:auto;border-right:0;
+    border-bottom:1px solid rgba(255,255,255,.06);padding-bottom:18px}
+  .body{padding:22px 0 80px}
+}
+</style>
+
+<div class="doc">
+  <aside class="side" id="side">
+    <div class="brand"><span class="xb" data-alt="Counter-Strike" aria-label="Cross-Section">
+      <span class="xb-c">C</span><span class="xb-m1">ross-</span><span class="xb-s">S</span><span class="xb-m2">ection</span>
+      <span class="xb-alt" aria-hidden="true">Counter-Strike</span>
+    </span> <span class="brand-ver">v6.1</span></div>
+    <div class="grp">开始</div>
+    <a href="#intro">这是什么</a>
+    <a href="#quick">快速开始</a>
+    <a href="#import">导入 Demo</a>
+    <div class="grp">数据</div>
+    <a href="#parse">解析流程</a>
+    <a href="#metrics">指标释义</a>
+    <a href="#weapon">武器指标</a>
+    <a href="#event">回合事件</a>
+    <a href="#clutch">多杀与残局</a>
+    <a href="#econ">经济与道具</a>
+    <div class="grp">界面</div>
+    <a href="#home">主页</a>
+    <a href="#demopage">Demo 页</a>
+    <a href="#replay">回放播放器</a>
+    <a href="#settings">设置项</a>
+    <div class="grp">其他</div>
+    <a href="#export">导出与 API</a>
+    <a href="#faq">常见问题</a>
+    <a href="#credits">依赖与致谢</a>
+    <a href="#contact">联系</a>
+    <a class="back" href="/">← 返回分析</a>
+  </aside>
+
+  <main class="body">
+
+    <section id="intro">
+      <h2><span class="num">01</span>这是什么</h2>
+      <p class="lead">本地运行的 CS2 对局分析工具。把 <code>.dem</code> 丢进目录，它解析成可查的数据：能力画像、逐场趋势、武器与道具细节、残局与多杀、回合级回放。全部在你自己电脑上跑，不联网、不上传、不需要账号。</p>
+      <ul>
+        <li><b>解析层</b>用开源的 <code>awpy 3.1.1</code>，不是自己写的解析器</li>
+        <li><b>存储</b>是单个 SQLite 文件（<code>data/cs2.db</code>），可以直接拷走</li>
+        <li><b>回放</b>按回合生成，四栏 HUD + 地图雷达 + 双轨回合轴</li>
+        <li><b>导出</b> CSV 全量数据，能直接喂给 AI 分析</li>
+      </ul>
+      <div class="tip">这个工具只读 demo，<b>不读取游戏进程、不注入、不修改任何游戏文件</b>。理论上不存在被 VAC 检测的风险，因为跟游戏本身没有任何交互。</div>
+    </section>
+
+    <section id="quick">
+      <h2><span class="num">02</span>快速开始</h2>
+      <p class="lead">解压即用，不需要装 Python（已经带了运行环境）。</p>
+      <ol>
+        <li>双击 <code>START.bat</code>，浏览器自动打开 <code>http://127.0.0.1:8790</code></li>
+        <li>把 <code>.dem</code> 放进 <code>demos/</code> 目录（或点「从 CS2 拉取」）</li>
+        <li>打开 <b>Demo 页</b> → 点「分析未处理」</li>
+        <li>等进度条走完，回主页看数据</li>
+      </ol>
+      <div class="tip">第一次启动会创建 <code>demos/</code>、<code>data/</code> 两个目录。所有东西都在程序自己那一层，删掉整个文件夹就干净了。</div>
+    </section>
+
+    <section id="import">
+      <h2><span class="num">03</span>导入 Demo</h2>
+      <p class="lead">三种方式，按方便程度排。</p>
+
+      <h3>从 CS2 自动拉取</h3>
+      <p>CS2 客户端里打开「比赛记录」→ 下载 demo，文件会存到
+        <code>&lt;CS2 安装目录&gt;\game\csgo\replays\</code>。
+        在 Demo 页点 <b>「⇩ 从 CS2 拉取」</b>，工具会把这个目录里新的 <code>.dem</code> 复制过来并自动登记。</p>
+      <ul>
+        <li>找不到目录时，去设置里填「CS2 安装目录」，或者直接填 replays 路径</li>
+        <li>已经存在的同名文件会跳过，不会重复复制</li>
+        <li>拉取完不会自动解析，还要点一次「分析未处理」</li>
+      </ul>
+
+      <h3>手动复制</h3>
+      <p>把 <code>.dem</code> 直接放进 <code>demos/</code>，然后点「扫描目录」。目录可以在设置里改成任意路径（比如 Steam 库所在的盘）。</p>
+
+      <h3>目录同步</h3>
+      <p>如果你用 Resilio / 坚果云之类的同步盘，把 <code>demos/</code> 指向同步目录，别的机器下的 demo 会自动出现在这里，点「扫描目录」就能登记。</p>
+    </section>
+
+    <section id="parse">
+      <h2><span class="num">04</span>解析流程</h2>
+      <p class="lead">一次解析大概 8–15 秒（180 MB 的 demo、20 回合左右）。</p>
+      <p>点「分析未处理」后，工具会依次：</p>
+      <ol>
+        <li>用 <code>awpy</code> 读 demo，加载 <code>rounds / kills / damages / stats / shots / item_events / bomb / blinds / grenades / fires / smokes / round_economy</code> 十二个数据集</li>
+        <li>把事件落进 SQLite（<code>matches / players / rounds / kills / damage / pms / economy / blinds / purchases / round_end / weapon_stat / grenade_throw</code>）</li>
+        <li>算派生指标（Rating 2.0、Impact、存活率、残局、多杀分桶等）</li>
+        <li>生成该场的回放数据（<code>data/replays/&lt;match_id&gt;.json</code>，约 3–5 MB）</li>
+      </ol>
+      <div class="fig">
+        <div class="bar">
+          <span class="chip on">分析未处理</span>
+          <span class="chip">↻ 重算评分</span>
+          <span class="chip">⟲ 重新解析</span>
+        </div>
+        <div class="cap">三个按钮的区别见下面「设置项」一章。</div>
+      </div>
+
+      <h3>身份识别</h3>
+      <p>工具需要知道「你」是哪个玩家，才能算个人数据。识别顺序：</p>
+      <ol>
+        <li>读设置里存的 steamid</li>
+        <li>读数据库里标记过的玩家（<code>is_me</code>）</li>
+        <li>跨多场出现次数最多的那个 steamid 自动推断</li>
+      </ol>
+      <p>推断错了就在顶栏下拉里手动选，选完会落库，以后不用再选。</p>
+      <div class="tip">同一台机器上如果有多个人玩，下拉里会列出所有出现过的玩家（括号里是参与场次）。切换玩家不会重新解析，只是换一套统计视角。</div>
+    </section>
+
+    <section id="metrics">
+      <h2><span class="num">05</span>指标释义</h2>
+      <p class="lead">页面上每个指标名都能悬浮看定义和公式（设置里可以关掉）。这里给完整对照。</p>
+
+      <h3>概览</h3>
+      <table class="dt">
+        <tr><th>指标</th><th>定义</th><th>算法</th></tr>
+        <tr><td>总回合</td><td>参与的所有回合数</td><td>各场回合数求和</td></tr>
+        <tr><td>总伤害</td><td>对敌方造成的实际血量伤害</td><td>按 awpy 口径封顶到目标剩余血量（避免过量伤害虚高）</td></tr>
+        <tr><td>总胜率</td><td>赢下的场次占已分胜负场次的比例</td><td>胜场 ÷ (胜 + 负)，<b>平局不计入分母</b></td></tr>
+        <tr><td>Rating 2.0</td><td>HLTV 的综合评分</td><td>0.0073×KAST + 0.3591×KPR − 0.5329×DPR + 0.2372×Impact + 0.0032×ADR + 0.1587</td></tr>
+        <tr><td>ADR</td><td>每回合平均伤害</td><td>总伤害 ÷ 总回合</td></tr>
+        <tr><td>KAST</td><td>有击杀/助攻/存活/被换 的回合占比</td><td>四类回合并集 ÷ 总回合</td></tr>
+        <tr><td>KPR / DPR</td><td>每回合击杀 / 每回合死亡</td><td>击杀÷回合、死亡÷回合</td></tr>
+        <tr><td>Impact</td><td>影响力评分</td><td>2.13×KPR + 0.42×APR − 0.41</td></tr>
+      </table>
+
+      <h3>平均（8 项一行）</h3>
+      <table class="dt">
+        <tr><th>指标</th><th>定义</th><th>算法</th></tr>
+        <tr><td>击杀 / 回合</td><td>每回合平均击杀</td><td>击杀 ÷ 回合</td></tr>
+        <tr><td>死亡 / 回合</td><td>每回合平均死亡</td><td>死亡 ÷ 回合</td></tr>
+        <tr><td>K/D</td><td>击杀死亡比</td><td>击杀 ÷ 死亡</td></tr>
+        <tr><td>助攻 / 回合</td><td>每回合平均助攻</td><td>助攻 ÷ 回合</td></tr>
+        <tr><td>首杀率</td><td>拿到全场第一个击杀的回合占比</td><td>首杀回合 ÷ 总回合</td></tr>
+        <tr><td>存活率</td><td>活到回合结束的比例</td><td>(总回合 − 死亡回合) ÷ 总回合</td></tr>
+        <tr><td>补枪占比</td><td>自己的击杀里属于「替刚死的队友报仇」的比例</td><td>换人击杀 ÷ 总击杀（分母是击杀，不是尝试次数）</td></tr>
+        <tr><td>拉枪占比</td><td>自己的死亡里随后被队友立刻换掉凶手的比例</td><td>被换死亡 ÷ 总死亡</td></tr>
+      </table>
+      <div class="tip">「补枪」和「拉枪」叫<b>占比</b>不叫成功率，因为分母是击杀数和死亡数，不是尝试次数。这两个数没法直接说「你补枪成功了几次」。</div>
+    </section>
+
+    <section id="weapon">
+      <h2><span class="num">06</span>武器指标</h2>
+      <p class="lead">武器区用 <code>‹ 名字 ›</code> 左右切换，一次看一把。</p>
+      <table class="dt">
+        <tr><th>指标</th><th>定义</th><th>算法</th></tr>
+        <tr><td>命中率</td><td>开火里有几次打中</td><td>产生伤害的开火次数 ÷ 总开火次数（同一 tick 配对）</td></tr>
+        <tr><td>局均击杀</td><td>用这把枪的每回合击杀</td><td>该武器击杀 ÷ 总回合</td></tr>
+        <tr><td>爆头率</td><td>击杀里爆头的比例</td><td>爆头击杀 ÷ 该武器击杀</td></tr>
+        <tr><td>阈值内低速开火率</td><td>开火瞬间速度已降到能精确射击范围的比例（急停的代理指标）</td><td>速度 ≤34 units/s 的枪械开火 ÷ 枪械开火数</td></tr>
+        <tr><td>超阈值速度开火率</td><td>带着速度开火的比例（上项的补数）</td><td>速度 &gt;34 units/s 的枪械开火 ÷ 枪械开火数</td></tr>
+        <tr><td>穿墙击杀</td><td>子弹穿透物体后击杀</td><td>awpy <code>penetrated</code> 标记</td></tr>
+        <tr><td>穿烟击杀</td><td>隔着烟雾击杀</td><td>awpy <code>thrusmoke</code> 标记</td></tr>
+        <tr><td>跳跃击杀</td><td>击杀瞬间自己处于腾空</td><td>击杀 tick 上 <code>is_jumping = true</code></td></tr>
+        <tr><td>盲狙击杀</td><td>狙击枪不开镜击杀（仅狙击枪显示）</td><td>awpy <code>noscope</code> 标记</td></tr>
+      </table>
+      <div class="tip"><b>为什么用速度而不是 inaccuracy</b>：awpy 的 <code>shots.inaccuracy</code> 读的是武器实体的 <code>m_fAccuracyPenalty</code>（连发累积的精度惩罚），官方源码注释写明「CS2 does not network the fully-computed inaccuracy」——真正的散布由引擎实时算，不写进 demo。实测也印证：速度 0-5 与 120+ 的开火，该值中位数几乎相同（AK 约 0.020 vs 0.021）。而 <code>snapshots</code> 里的速度是引擎真实物理量，34 units/s 是步枪还能精确射击的临界值，跨场可直接比较。</div>
+      <div class="tip"><b>跳跃击杀</b>是 awpy 没有的字段，用击杀 tick 上的快照判定，起跳当帧可能落在相邻 tick，会有少量漏计。<b>盲狙</b>同理，只对标了 <code>noscope</code> 的击杀计数。</div>
+      <div class="tip"><b>武器有类别</b>：<code>gun</code> 枪械 / <code>melee</code> 近战 / <code>util</code> 投掷物。投掷物和刀也会触发 <code>weapon_fire</code> 事件（扔闪、挥刀都算），但那不是射击——所以命中率、急停率只对枪械计算，投掷物行的这两列<b>留空</b>。页面上的武器卡只轮播有击杀的枪械，CSV 里才看得到全部 29 行。</div>
+      <div class="tip"><b>命中数与伤害对不上账是真实存在的口径差，不是 bug</b>：<br>
+        ① 命中——总览用 awpy 的统计口径（<code>320</code>），武器明细用「开火 tick 与伤害 tick 配对」口径（<code>270</code>），差 50 次属于配对不上（穿墙、延迟结算）。CSV 里单独占一行 <code>(未归属)</code>，不静默丢弃。<br>
+        ② 伤害——总览的 <code>dmg</code> 是按<b>剩余血量</b>截断的（<code>7517</code>），武器明细是<b>单次截断到 100</b> 的原始伤害（<code>9099</code>），差 1582 是溢出伤害。对满血敌人打出 120 的爆头，前者记 100，后者记 100；但对只剩 20 血的敌人补一枪 100，前者记 20，后者记 100——这个差值不可能靠改代码消掉，只能分开标注。<br>
+        所以<b>不要用武器明细的 dmg 加总去核总览伤害</b>，两者不是同一个量。</div>
+      <div class="tip"><b>消音武器的伤害记在基础武器名下</b>：CS2 的伤害事件不带 <code>_silencer</code> 后缀，M4A1-S 打出的伤害全记成 <code>m4a1</code>，所以 <code>m4a1_silencer</code> 有击杀却显示伤害为空（不是 0）。两把枪在事件层面无法拆开。</div>
+    </section>
+
+    <section id="event">
+      <h2><span class="num">07</span>回合事件</h2>
+      <p class="lead">首杀 / 补枪 / 拉枪三块，都是按回合统计。</p>
+      <table class="dt">
+        <tr><th>指标</th><th>定义</th><th>算法</th></tr>
+        <tr><td>首杀</td><td>回合内第一个击杀</td><td>awpy <code>kills</code> 按回合取第一条（排除自杀）</td></tr>
+        <tr><td>首死</td><td>回合内第一个死亡</td><td>同上，统计受害者</td></tr>
+        <tr><td>换人击杀</td><td>替 5.25 秒内刚死的队友报仇</td><td>awpy <code>is_trade</code> 标记</td></tr>
+        <tr><td>被换死亡</td><td>自己死后立刻被队友换掉凶手</td><td>awpy <code>victim_traded</code> 标记</td></tr>
+      </table>
+    </section>
+
+    <section id="clutch">
+      <h2><span class="num">08</span>多杀与残局</h2>
+      <p class="lead">多杀看爆发力，残局看 1vN 的处理能力。</p>
+
+      <h3>多杀</h3>
+      <table class="dt">
+        <tr><th>指标</th><th>定义</th><th>算法</th></tr>
+        <tr><td>2K / 3K / 4K / 5K+</td><td>一回合恰好完成 N 次有效击杀</td><td>按「玩家 × 回合」统计击杀数后分桶，<b>不含自杀与环境死亡</b></td></tr>
+        <tr><td>多杀回合率</td><td>至少 2 杀的回合占个人回合的比例</td><td>多杀回合数 ÷ 个人计入回合数</td></tr>
+      </table>
+
+      <h3>残局</h3>
+      <table class="dt">
+        <tr><th>指标</th><th>定义</th><th>算法</th></tr>
+        <tr><td>残局机会</td><td>成为本方唯一存活者、对方还有人</td><td>按击杀事件重建存活人数，触发时记录</td></tr>
+        <tr><td>残局获胜 / 失败</td><td>残局开始后本方最终输赢</td><td>按回合结果归属</td></tr>
+        <tr><td>残局成功率</td><td>赢下的残局占比</td><td>获胜 ÷ 已结算机会（未确认结果的不进分母）</td></tr>
+        <tr><td>残局存活率</td><td>残局里活到回合判定时点</td><td>存活至回合末的残局数 ÷ 残局机会</td></tr>
+        <tr><td>残局击杀 / 伤害</td><td>残局窗口内的产出</td><td>残局起 tick 至回合判定 tick 内的击杀与伤害</td></tr>
+        <tr><td>保枪次数</td><td>残局输了但自己活着，装备保住</td><td>回合判定前 1 秒的快照：存活 + 持有装备</td></tr>
+        <tr><td>保枪率</td><td>保枪次数占残局机会</td><td>保枪 ÷ 残局机会</td></tr>
+        <tr><td>保留装备总额 / 平均</td><td>保住的装备购置价</td><td>按回合判定时点库存估值求和、取平均</td></tr>
+      </table>
+      <div class="tip">残局输掉<b>不等于</b>没产出。一场残局完全可能输回合，但拿到击杀、伤害，还把枪保住——这三项是分开统计的。</div>
+      <div class="tip"><b>残局机会总数 = 1v1~1v5 各档机会数之和</b>，两者都从击杀事件流重建，同一个来源。awpy 自带的 <code>clutch_played</code> 在边界回合上和我们的重建结果会有出入（它的 roster 推导方式不同），所以总量以重建结果为准。<br>另外注意：awpy 的 <code>clutch_1vN</code> 字段统计的是<b>赢下</b>的次数（官方注释为 clutches <i>won</i>），不是机会数——所以它全为 0 只代表一次没赢，不代表没打过残局。</div>
+
+      <h3>人数优势</h3>
+      <table class="dt">
+        <tr><th>指标</th><th>定义</th><th>算法</th></tr>
+        <tr><td>先形成人优势</td><td>本方首次成为人数较多一方的回合占比</td><td>优势回合 ÷ 总回合</td></tr>
+        <tr><td>优势转胜率</td><td>拿到人数优势后赢下回合</td><td>优势回合获胜数 ÷ 优势回合</td></tr>
+        <tr><td>劣势翻盘率</td><td>处于人数劣势后翻盘</td><td>翻盘回合 ÷ 优势回合</td></tr>
+      </table>
+    </section>
+
+    <section id="econ">
+      <h2><span class="num">09</span>经济与道具</h2>
+
+      <h3>经济</h3>
+      <table class="dt">
+        <tr><th>指标</th><th>定义</th><th>算法</th></tr>
+        <tr><td>总支出</td><td>整场买东西花掉的钱</td><td>购买事件 cost 求和</td></tr>
+        <tr><td>每回合平均支出</td><td>单回合消费</td><td>总支出 ÷ 回合</td></tr>
+        <tr><td>每回合装备价值</td><td>回合末人均携带装备估值</td><td>装备估值按回合加权平均（落库时已是人均，不再除 5）</td></tr>
+        <tr><td>回合初继承装备</td><td>回合开始时人均已有装备</td><td>同上，取回合开始快照</td></tr>
+        <tr><td>购买类型</td><td>手枪局 / ECO / 强起 / 半买 / 全买</td><td>按队伍 5 人装备合计分档</td></tr>
+        <tr><td>花费构成</td><td>CT / T 各自的钱花在哪</td><td>见下方说明</td></tr>
+      </table>
+      <div class="tip">装备价值是<b>人均</b>。CS2 满经济 5 人合计约 20,000，人均 4,000——如果看到人均上万，那一定是口径错了。</div>
+
+      <h3>花费构成（CT / T 分别）</h3>
+      <p>横向 100% 堆叠条，各段宽度就是占比。分八类：步枪 / 狙击枪 / 冲锋枪 / 霰弹机枪 / 甲 / 道具 / 手枪 / 钳子。</p>
+      <table class="dt">
+        <tr><th>类别</th><th>取数方式</th></tr>
+        <tr><td>步枪 / 狙击枪 / 冲锋枪 / 霰弹机枪 / 手枪 / 道具</td><td>购买事件的 cost 精确求和，按武器名归类</td></tr>
+        <tr><td>甲</td><td><b>反推</b>：本回合现金支出 − 已知购买，剩下的就是甲</td></tr>
+        <tr><td>钳子</td><td><code>m_bPawnHasDefuser</code> 由无到有的回合 × $400（只有 CT）</td></tr>
+      </table>
+      <div class="tip">购买事件里<b>不含护甲和拆弹钳</b>，这两项只能用「本回合实际花掉的钱」减去「已知买到的东西」倒推。所以「甲」是残差，可能包含极少量的其他漏计项。</div>
+
+      <h3>道具</h3>
+      <p>火 / 雷 / 烟 / 闪 / 诱饵五个独立面板：</p>
+      <table class="dt">
+        <tr><th>指标</th><th>定义</th><th>算法</th></tr>
+        <tr><td>局均伤害</td><td>火雷每回合造成的伤害（仅火雷）</td><td>火雷伤害 ÷ 回合</td></tr>
+        <tr><td>每颗平均伤害</td><td>一颗火雷打出多少伤害</td><td>火雷伤害 ÷ 有效投掷数</td></tr>
+        <tr><td>有效投掷</td><td>真的造成了伤害的投掷</td><td>damage 事件按 tick 去重</td></tr>
+        <tr><td>购买 / 捡起</td><td>买了几颗、捡了几颗</td><td>item_events 的 purchase / pickup</td></tr>
+        <tr><td>每人次平均致盲</td><td>每个被闪到的敌人平均瞎多久（仅闪光）</td><td>致盲总秒数 ÷ 致盲人次</td></tr>
+        <tr><td>每颗闪到几人</td><td>一颗闪光平均闪到几个人（仅闪光）</td><td>致盲人次 ÷ 投出颗数</td></tr>
+        <tr><td>闪光效率</td><td>投出的闪光里有多少生效</td><td>生效闪光数 ÷ 投出数（只算敌方）</td></tr>
+      </table>
+      <div class="tip"><b>投掷次数已按人归属</b>，来自 demoparser2 的引爆事件（详见下方「投掷者是怎么拿到的」）。买、捡、伤害、致盲同样是按人的。</div>
+      <div class="tip">闪光效率不能用「致盲人次 ÷ 投出数」——一颗闪光同时闪到 3 个人会算成 300%。这里是按<b>闪光颗数</b>去重。</div>
+    </section>
+
+    <section id="home">
+      <h2><span class="num">10</span>主页</h2>
+      <p class="lead">从上到下 10 个区块，左侧固定锚点栏可跳转。顶部下拉切换「我」是谁。</p>
+      <div class="fig">
+        <div class="bar">
+          <span class="chip on">概览</span><span class="chip">平均</span>
+          <span class="chip">武器</span><span class="chip">回合事件</span>
+          <span class="chip">多杀残局</span><span class="chip">结束原因</span>
+          <span class="chip">地图数据</span><span class="chip">经济</span>
+          <span class="chip">道具</span><span class="chip">图池</span>
+        </div>
+        <div class="cap">顶部锚点栏：点一下跳到对应区块，滚动时会自动高亮当前位置。</div>
+      </div>
+      <ul>
+        <li><b>概览</b>：三个并列大数（总回合 / 总伤害 / 总胜率）+ 一条 Rating 相关指标带。点指标名切换下方折线图，最多画最近 20 场。</li>
+        <li><b>平均</b>：8 项一行。右上角 <code>全部 | CT | T</code> 单击循环切换，切到单阵营时没有数据的项会隐藏。</li>
+        <li><b>武器</b>：<code>‹ 名字 ›</code> 切换，一次一把，下面是枪法效率与特殊击杀。</li>
+        <li><b>回合事件</b>：首杀 / 补枪 / 拉枪三块，内部指标横排。</li>
+        <li><b>多杀残局</b>：多杀回合率放大 + 2K/3K/4K/5K 一行；残局两行（机会/胜/负/成功率/存活率/击杀/伤害 + 保枪四项），下面 1v1~1v5 明细表。</li>
+        <li><b>结束原因</b>：环形图，蓝=CT 橙=T，扇区上放 CS 官方图标，整圈缓慢旋转。标题右侧的问号点开是口径说明。</li>
+        <li><b>地图数据</b>：每张图的场次、胜负、胜率、环比。</li>
+        <li><b>经济</b>：四项总额 + 购买类型胜率 + 逐场花费横条（带占比）。</li>
+        <li><b>道具</b>：五个独立面板，各自的购买 / 捡起 / 投出 / 伤害 / 致盲。</li>
+        <li><b>图池</b>：玩过哪些图、各自胜率。</li>
+      </ul>
+      <div class="tip"><b>平局是独立的第三种结果。</b>MR12 先到 13 分算赢，常规打满 24 回合 12:12 就是平局（加时后 15:15 同理）。
+      平局既不算赢也不算输，胜率分母里不含它；如果打过平局，总胜率下面会显示「N 平 (X%)」。</div>
+      <div class="tip"><b>加时局</b>在比分后面标「加时」。换边规则：R1-12 / R13-24 换一次，加时每 3 回合换一次（R25-27 延续下半场）。</div>
+    </section>
+
+    <section id="demopage">
+      <h2><span class="num">11</span>Demo 页</h2>
+      <p class="lead">从主页导航栏最右边的 <b>「Demo →」</b> 进去。管 demo 的地方和数据统计分开，避免混在一起。</p>
+
+      <h3>数据操作</h3>
+      <table class="dt">
+        <tr><th>按钮</th><th>做什么</th><th>什么时候用</th></tr>
+        <tr><td>⇩ 从 CS2 拉取</td><td>把 CS2 replays 目录里的新 demo 复制过来</td><td>刚在游戏里下载完 demo</td></tr>
+        <tr><td>扫描目录</td><td>登记 demos/ 下新增或删除的文件</td><td>手动拷了 demo 进来</td></tr>
+        <tr><td>分析未处理</td><td>解析还没分析过的 demo</td><td>有新文件时</td></tr>
+        <tr><td>↻ 重算评分</td><td>不重新解析，只用现有数据重算 Rating / Impact</td><td>改了评分公式</td></tr>
+        <tr><td>⟲ 重新解析</td><td>清空所有分析结果，从头解析全部 demo</td><td>解析器升级、数据明显不对</td></tr>
+        <tr><td>导出完整 CSV</td><td>把全部数据导成带说明的 CSV</td><td>想丢给 AI 或做表</td></tr>
+      </table>
+      <div class="tip"><b>重算评分 ≠ 重新解析</b>。前者只跑公式（1 秒），后者要读 demo（每场 10 秒左右）。绝大多数情况用前者就够。</div>
+
+      <h3>对局表</h3>
+      <p>一张表管全：文件信息 + 该场统计 + 操作。</p>
+      <div class="fig">
+        <div class="tbl">
+          <div class="r"><div class="c">地图</div><div class="c">比分</div><div class="c">结果</div><div class="c">K/D/A</div><div class="c">Rating</div></div>
+          <div class="r"><div class="c">阿努比斯</div><div class="c">12:9</div><div class="c">胜</div><div class="c">16/20/3</div><div class="c">0.91</div></div>
+          <div class="r"><div class="c">远古遗迹</div><div class="c">9:13</div><div class="c">负</div><div class="c">17/18/8</div><div class="c">1.16</div></div>
+        </div>
+        <div class="cap">地图格子下面一行小字是文件大小；鼠标停在上面能看到完整文件名。最右列是「回放 →」，未分析的显示「分析」按钮。</div>
+      </div>
+      <p>列依次是：地图 / 时间 / 比分 / 结果 / K / D / A / ADR / KAST / Rating / Impact / 花费 / 操作。未分析的 demo 统计列留 <code>—</code>。</p>
+    </section>
+
+    <section id="replay">
+      <h2><span class="num">12</span>回放播放器</h2>
+      <p class="lead">按回合生成，不是整场视频——是数据驱动的 2D 俯视重演。</p>
+      <div class="fig">
+        <div class="cols">
+          <div class="c">左侧队伍栏</div>
+          <div class="c">地图雷达</div>
+          <div class="c">右侧队伍栏</div>
+          <div class="c">回合轴 / 事件</div>
+        </div>
+        <div class="cap">四栏布局：左右按队伍分（不按敌我），中间雷达上是玩家位置与朝向。</div>
+      </div>
+      <h3>能看到什么</h3>
+      <ul>
+        <li><b>玩家卡</b>：血量（整格当血条，按阵营着色）、护甲/头盔、当前武器、金钱、C4 携带状态</li>
+        <li><b>地图</b>：雷达底图 + 玩家编号（CT/T 各自 1–5）+ 朝向、轨迹（可选）、开火方向</li>
+        <li><b>道具</b>：烟雾、火焰、闪光、诱饵的实际位置</li>
+        <li><b>事件</b>：击杀日志 <code>击杀者（武器 混烟/目盲/穿墙/跳跃/盲狙/爆头）+助攻 → 死亡者</code>，人名按阵营着色</li>
+        <li><b>回合轴</b>：横轴回合序号，上下双轨表示胜负归属，图标编码获胜方式，半场/加时换边处有分隔</li>
+        <li><b>TAB 面板</b>：整场计分板（K/D/A、爆头率、ADR、KAST、Rating、首杀、多杀、道具统计）</li>
+      </ul>
+      <h3>操作</h3>
+      <ul>
+        <li>点回合轴任意一格切回合，播放中也能切</li>
+        <li>准备期可跳过 / 快进</li>
+        <li>默认只显示当前位置，轨迹要手动开</li>
+      </ul>
+      <div class="tip">回放数据缓存在 <code>data/replays/&lt;match_id&gt;.json</code>，一场 3–5 MB。第一次打开某场要生成（约 30 秒），之后秒开。重新解析会清掉缓存。</div>
+    </section>
+
+    <section id="settings">
+      <h2><span class="num">13</span>设置项</h2>
+      <p class="lead">主页右上角 <b>「⚙ 设置」</b>。</p>
+      <table class="dt">
+        <tr><th>项</th><th>含义</th><th>默认</th></tr>
+        <tr><td>Demo 目录</td><td>去哪读 <code>.dem</code> 文件</td><td>程序目录下的 <code>demos/</code></td></tr>
+        <tr><td>CS2 安装目录</td><td>读地图雷达参数（<code>resource/overviews/*.txt</code>）用；留空自动探测正在运行的 cs2.exe</td><td>空（自动）</td></tr>
+        <tr><td>数据目录</td><td>数据库、回放缓存、导出文件放哪</td><td>程序目录下的 <code>data/</code></td></tr>
+        <tr><td>烟雾特效</td><td>整页背景的 WebGL 烟雾动效，关掉省显卡</td><td>开</td></tr>
+        <tr><td>指标说明</td><td>鼠标悬浮在指标名上显示定义与公式</td><td>开</td></tr>
+        <tr><td>主题色</td><td>全站配色基准，会派生表头、按钮、hover、图表线等</td><td><code>#060607</code></td></tr>
+      </table>
+      <div class="tip">改完目录要<b>重启工具</b>才完全生效（数据库连接在启动时建立）。</div>
+    </section>
+
+    <section id="export">
+      <h2><span class="num">14</span>导出与 API</h2>
+      <h3>CSV 导出</h3>
+      <p>Demo 页点「导出完整 CSV」会生成 <code>data/exports/*.csv</code>，60 列、每行一场，开头有 75 行 <code>#</code> 注释说明每一列的口径（分母是什么、单位是什么、哪些情况不算）。可以直接丢给 AI 分析，不用再解释字段。</p>
+      <h3>本地 API</h3>
+      <p>服务本身就带 REST 接口，工具要二次开发可以直接调：</p>
+      <table class="dt">
+        <tr><th>端点</th><th>返回</th></tr>
+        <tr><td><code>/api/state</code></td><td>全量状态：demo 列表、玩家列表、全部统计、任务进度</td></tr>
+        <tr><td><code>/api/overview?steamid=</code></td><td>指定玩家的总览</td></tr>
+        <tr><td><code>/api/replay?m=&lt;match_id&gt;</code></td><td>该场回放数据</td></tr>
+        <tr><td><code>/api/metrics</code></td><td>指标字典（名称/定义/公式/来源）</td></tr>
+        <tr><td><code>/api/export/csv</code></td><td>触发 CSV 导出</td></tr>
+        <tr><td><code>/api/v1/schema</code></td><td>v1 API 的端点清单</td></tr>
+        <tr><td><code>/api/v1/query?sql=</code></td><td>只读 SQL 查询（写操作会被拒绝）</td></tr>
+      </table>
+    </section>
+
+    <section id="faq">
+      <h2><span class="num">15</span>常见问题</h2>
+
+      <h3>页面打不开 / 白屏</h3>
+      <p>多半是端口被占用（旧进程没退）。<code>START.bat</code> 会自动杀掉占用 8790 的旧进程再启动，如果还不行，看命令行窗口里的报错。</p>
+
+      <h3>数据全是 0 或空白</h3>
+      <ol>
+        <li>顶部下拉选的人对不对（可能选到了没打过的人）</li>
+        <li>Demo 页看状态是不是「失败」，鼠标停上去看错误</li>
+        <li>点一次「⟲ 重新解析」</li>
+      </ol>
+
+      <h3>回放打开很慢</h3>
+      <p>第一次打开某场要生成缓存（约 30 秒）。之后秒开。</p>
+
+      <h3>存活率看起来偏低</h3>
+      <p>存活率 = (总回合 − 死亡回合) ÷ 总回合。如果你打得激进，这个数会很低。可以先看 K/D：KD &lt; 1 的时候，存活率低是正常的。</p>
+
+      <h3>某个指标是「—」</h3>
+      <p>样本不足时不给数（比如某把枪只开了一枪）。这是故意的——宁可空着也不给一个没意义的百分比。</p>
+
+      <h3>为什么没有暂停 / 投降统计</h3>
+      <p>awpy 3.1.1 拿不到 <code>timeout</code> / <code>pause</code> 事件，也拿不到投降的独立原因字段。只能按回合时长 &gt;115 秒推断「可能有暂停」，无法知道哪队叫的。</p>
+
+      <h3>投掷者是怎么拿到的</h3>
+      <p>awpy 的 <code>grenades</code> 表里投掷者字段全是空值，所以一开始只能数总数。后来改用 <code>demoparser2</code> 的引爆事件 ——
+      <code>smokegrenade_detonate</code> / <code>flashbang_detonate</code> / <code>hegrenade_detonate</code> /
+      <code>inferno_startburn</code> / <code>decoy_started</code> —— 这些事件自带 <code>user_steamid</code>，能精确到人。</p>
+      <p class="tip"><b>投出数可能小于购买数，这不是 bug。</b>买了道具但死在手里的不会出现在投出统计里，实测全场投出率约 55%。捡起别人的道具再投出去会算进你的投出数，所以它也可能大于购买数。</p>
+    </section>
+
+    <section id="credits">
+      <h2><span class="num">16</span>依赖与致谢</h2>
+      <p class="lead">这个工具没打算重新发明轮子。解析层是别人的开源项目，我做的是它之上的统计与呈现。</p>
+
+      <h3>核心依赖</h3>
+      <table class="dt">
+        <tr><th>项目</th><th>用途</th><th>许可</th></tr>
+        <tr><td><b>awpy</b> 3.1.1</td>
+            <td>CS2 <code>.dem</code> 解析：回合、击杀、伤害、射击、道具、致盲、经济</td>
+            <td>MIT</td></tr>
+        <tr><td>polars</td><td>awpy 的数据表结构依赖</td><td>MIT</td></tr>
+        <tr><td>typer</td><td>awpy 的 CLI 依赖</td><td>MIT</td></tr>
+        <tr><td><b>Python</b> / SQLite</td><td>运行时、本地数据库</td><td>PSF / Public Domain</td></tr>
+      </table>
+      <p>awpy 是 Peter Xenopoulos 维护的开源项目，它的解析后端来自 LaihoE 的 demoparser。
+        这个工具的解析速度（8–15 秒一场）基本全是它带来的——自己写的话大概要一两分钟。</p>
+      <div class="tip">
+        <b>用法说明</b>：本项目对 awpy 是 <code>import</code> 调用，<b>没有复制、修改或分发它的源码</b>。
+        MIT 许可允许这样用（包括闭源分发），条件是随分发保留版权声明——
+        安装包根目录的 <code>THIRD-PARTY-NOTICES.md</code> 就是这个用途。
+      </div>
+
+      <h3>自研部分</h3>
+      <p><code>cs2tool/</code> 下全部 Python 与前端代码都是本项目写的。其中几处是在 awpy 字段不够用时自己重建的：</p>
+      <table class="dt">
+        <tr><th>功能</th><th>为什么自己做</th><th>怎么做的</th></tr>
+        <tr><td>残局 1v1~1v5</td><td>awpy 的 <code>clutch_1vN</code> 字段没填</td>
+            <td>按击杀事件流重建双方存活人数，触发条件记录</td></tr>
+        <tr><td>跳跃击杀</td><td>awpy 的 <code>kills</code> 没有该字段</td>
+            <td>击杀 tick 上取快照读 <code>is_jumping</code></td></tr>
+        <tr><td>每武器命中率</td><td>awpy 只给整场汇总</td>
+            <td>开火事件与伤害事件做同 tick 配对</td></tr>
+        <tr><td>保枪判定</td><td>awpy 没有这个概念</td>
+            <td>回合判定前 1 秒采样存活状态与装备库存</td></tr>
+        <tr><td>闪光的「生效」口径</td><td>直接数致盲人次会虚高到 90%+</td>
+            <td>按闪光颗数去重，只算敌方</td></tr>
+      </table>
+
+      <h3>代码引用关系</h3>
+      <p>本项目的代码构成按来源分三类：</p>
+      <table class="dt">
+        <tr><th>类型</th><th>内容</th><th>来源</th></tr>
+        <tr><td><b>直接调用</b></td>
+            <td><code>awpy_ingest.py</code> 里的 <code>from awpy import Demo</code>，
+                读取 <code>rounds/kills/damages/stats/shots/item_events/bomb/blinds/grenades/fires/smokes/round_economy</code>
+                十二个数据集</td>
+            <td>awpy 3.1.1（MIT），<b>只 import，未复制或修改源码</b></td></tr>
+        <tr><td><b>规则引用</b></td>
+            <td>Rating 2.0、Impact、KAST、ADR、KPR/DPR 的公式；
+                购买类型分档规则；Rating 3.0 <b>未实现</b>（无公开公式）</td>
+            <td>HLTV 与社区公开整理，<b>只参考公式，未复制代码</b></td></tr>
+        <tr><td><b>本项目自研</b></td>
+            <td><code>server.py</code>、<code>awpy_ingest.py</code> 的数据落库与派生计算、
+                <code>stats_api.py</code>、<code>clutch.py</code>、<code>rounddata.py</code>、
+                <code>metrics.py</code>、<code>ability.py</code>、<code>export_csv.py</code>、
+                <code>api_v1.py</code>，以及 <code>web/</code> 下全部 HTML/CSS/JS</td>
+            <td>本项目</td></tr>
+      </table>
+      <div class="tip">
+        <b>一句话概括</b>：解析靠 awpy，公式看 HLTV 公开定义，统计与界面是自己写的。
+      </div>
+
+      <h3>界面素材</h3>
+      <p>武器与道具图标、地图雷达底图取自 Counter-Strike 2 客户端，仅用于本地界面显示。
+        这些素材不参与任何数据计算，删除 <code>web/icons/</code> 与 <code>web/maps/</code>
+        后工具仍可运行（图标与地图显示为空白）。</p>
+
+      <h3>数据口径参考</h3>
+      <p>Rating 2.0、Impact、KAST、ADR 等指标的定义来自 HLTV 与社区公开整理（<b>只参考公式，没复制代码</b>）。
+        Rating 3.0 没有公开公式，所以本项目<b>没有实现</b>——宁可少一个数，也不给没法复核的。</p>
+
+      <h3>引用建议</h3>
+      <p>awpy 作者在 README 里提了一个非强制的请求：</p>
+      <div class="tip">If you use the parser for any public analysis, we kindly ask you to link to the
+        Awpy repository, so that others may know how you parsed, analyzed or visualized your data.</div>
+      <p>如果你要把基于本工具产出的数据公开发表，建议带上：</p>
+      <p><code>数据解析使用 awpy (https://github.com/pnxenopoulos/awpy)</code></p>
+    </section>
+
+    <section id="contact">
+      <h2><span class="num">17</span>联系</h2>
+      <p class="lead">有 bug、想要新指标、或者觉得某个数字不对，都可以找我。</p>
+      <table class="dt">
+        <tr><th>方式</th><th>地址</th></tr>
+        <tr><td>QQ</td><td><b>1470232252</b></td></tr>
+      </table>
+      <div class="tip">报 bug 最好带上：<b>哪张图哪一回合</b>、<b>你看到的数</b>、<b>你觉得应该是多少</b>。有这个三样我基本能直接定位。</div>
+      <p style="margin-top:30px;font-size:11px;color:var(--dim);opacity:.5">
+        解析层：awpy 3.1.1 · 存储：SQLite · 界面：原生 HTML/CSS/JS · 全部本地运行
+      </p>
+    </section>
+
+  </main>
+</div>
+
+<script>
+/* 侧栏高亮：滚动到哪个 section 就点亮对应链接 */
+(function () {
+  const links = [...document.querySelectorAll('#side a[href^="#"]')];
+  const secs = links.map(a => document.getElementById(a.getAttribute('href').slice(1)))
+    .filter(Boolean);
+  if (!secs.length) return;
+  const map = new Map();
+  links.forEach(a => {
+    const el = document.getElementById(a.getAttribute('href').slice(1));
+    if (el) map.set(el, a);
+  });
+
+  function sync() {
+    const y = window.scrollY + 96;
+    let cur = secs[0];
+    for (const s of secs) if (s.offsetTop <= y) cur = s;
+    links.forEach(a => a.classList.remove('on'));
+    const a = map.get(cur);
+    if (a) a.classList.add('on');
+  }
+  window.addEventListener('scroll', sync, { passive: true });
+  window.addEventListener('resize', sync);
+  sync();
+
+  /* 点目录平滑滚动 */
+  links.forEach(a => a.addEventListener('click', e => {
+    const el = document.getElementById(a.getAttribute('href').slice(1));
+    if (!el) return;
+    e.preventDefault();
+    window.scrollTo({ top: el.offsetTop - 20, behavior: 'smooth' });
+    history.replaceState(null, '', a.getAttribute('href'));
+  }));
+})();
+</script>
+<script src="/brand.js"></script>

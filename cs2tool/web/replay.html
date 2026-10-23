@@ -1,0 +1,2117 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>CS2 回放</title><style>
+:root{
+  --bg:#101011;--panel:#191a1b;--panel2:#141516;--line:#2b2c2e;--txt:#e9eaec;--dim:#858585;
+  --deep:#0c0c0d;--raise:#232426;
+  --ct:#5b8fd4;--terr:#d8a83c;--red:#ff4d4d;--grn:#7bd44b;
+  --noise:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='0.04'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --haze:radial-gradient(ellipse 46% 62% at 30% 26%, rgba(255,255,255,.10), transparent 66%),
+         radial-gradient(ellipse 38% 52% at 70% 74%, rgba(255,255,255,.065), transparent 66%);
+  --tex:var(--noise);
+  --texsize:140px 140px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;color:var(--txt);overflow:hidden;
+     font:13px/1.45 "Stratum2","Noto Sans SC","Microsoft YaHei",system-ui,sans-serif;
+     display:grid;grid-template-rows:52px 1fr auto;height:100vh;position:relative;
+     /* 高清背景（2559×1390）：全屏 cover，左上光柱区单独压暗 */
+     background:
+       linear-gradient(180deg,rgba(var(--tint),.66) 0%,rgba(var(--tint),.52) 42%,rgba(var(--tint),.76) 100%),
+       radial-gradient(ellipse 54% 62% at 15% 8%,rgba(var(--tint),.86) 0%,transparent 72%),
+       url('/api/bg') center center / cover no-repeat,
+       rgb(var(--tint));
+     background-attachment:fixed}
+/* 内容层压在背景之上 */
+#topbar,#main,#bottom{position:relative;z-index:1}
+
+/* ===== 顶部比分条（渐变恢复） ===== */
+#topbar{display:grid;grid-template-columns:1fr auto 1fr;align-items:stretch;
+        background:linear-gradient(180deg,rgba(29,30,32,.74),rgba(17,18,19,.80));
+        backdrop-filter:blur(10px);border-bottom:1px solid #303133;position:relative}
+#topbar::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;
+               background:linear-gradient(90deg,transparent,#333,transparent)}
+.tbox{display:flex;align-items:center;gap:12px;padding:0 20px;position:relative}
+.tbox.l{justify-content:flex-end}
+.tbox.r{justify-content:flex-start}
+.tbox.l::before{content:'';position:absolute;inset:0;
+  background:linear-gradient(270deg,rgba(91,143,212,.26),rgba(91,143,212,.02) 70%,transparent)}
+.tbox.r::before{content:'';position:absolute;inset:0;
+  background:linear-gradient(90deg,rgba(216,168,60,.26),rgba(216,168,60,.02) 70%,transparent)}
+.tbox>*{position:relative;z-index:1}
+.sc{font-size:30px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.03em;
+    text-shadow:0 2px 6px rgba(0,0,0,.85)}
+.sc.ct{color:var(--ct)} .sc.terr{color:var(--terr)}
+.sd{font-size:11px;padding:2px 9px;border-radius:3px;font-weight:700;letter-spacing:.06em}
+.sd.ct{color:#e6e7e9;background:rgba(91,143,212,.22);border:1px solid #383940}
+.sd.terr{color:#ffe9b8;background:rgba(216,168,60,.22);border:1px solid #6b5722}
+#mid{display:flex;align-items:center;gap:14px;padding:0 22px;background:rgba(0,0,0,.5);
+     border-left:1px solid #2c2d2f;border-right:1px solid #2c2d2f;min-width:350px;justify-content:center}
+#mid .rnd{font-size:12px;color:var(--dim);white-space:nowrap}
+#mid .rnd b{color:var(--txt);font-size:15px}
+#mid .clk{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;min-width:60px;text-align:center;
+          text-shadow:0 2px 5px rgba(0,0,0,.8)}
+#mid .c4{font-size:11.5px;padding:3px 10px;border-radius:4px;border:1px solid #2c2d2f;color:var(--dim);
+         font-variant-numeric:tabular-nums;white-space:nowrap;background:#131415}
+#mid .c4.armed{color:#ff8a5c;border-color:#6b3018;background:#2a1008;font-weight:700}
+#mid .c4.done{color:var(--grn);border-color:#2c4a2c;background:#101a0c}
+#mid .c4.loose{color:#ffcf3a;border-color:#59461f;background:#1c1708;font-weight:650}
+
+/* ===== 主体：队伍UI 紧贴地图 ===== */
+#main{display:flex;min-height:0;background:transparent}
+.roster{flex:0 0 266px;background:rgba(19,20,22,.62);backdrop-filter:blur(7px);
+        display:flex;flex-direction:column;overflow:hidden}
+#left{border-right:1px solid var(--line)}
+#right{border-left:1px solid var(--line)}
+#stage{flex:0 0 auto;height:100%;position:relative;background:transparent}
+#wrap{height:100%;aspect-ratio:1/1;position:relative}
+#wrap canvas{width:100%;height:100%;display:block;background:#0c0c0d;
+       box-shadow:0 0 0 1px rgba(255,255,255,.07)}
+/* 每个玩家格自己的烟雾层 */
+.pl .plsmoke{position:absolute;inset:0;width:100%;height:100%;z-index:0;
+             pointer-events:none;border-radius:inherit;mix-blend-mode:multiply;opacity:.55;
+             transition:clip-path .15s linear;
+             /* 只留在血条色块覆盖的那段宽度里，血掉多少烟就剩多少 */
+             clip-path:inset(0 calc(100% - var(--hp,100%)) 0 0)}
+/* 右侧 T 方是镜像布局（.pl.rrow .hpfill 用 right:0 从右往左填），烟的裁剪也要镜像 */
+.pl.rrow .plsmoke{clip-path:inset(0 0 0 calc(100% - var(--hp,100%)))}
+/* canvas 是定位元素，会把非定位的文字盖住，得把内容抬上来 */
+.pl .r1,.pl .r23{position:relative;z-index:1}
+.hdr{padding:6px 19px;font-size:11px;letter-spacing:.06em;background:var(--raise);
+     border-bottom:1px solid var(--line);display:flex;justify-content:space-between;
+     align-items:center;color:var(--dim);flex:0 0 auto}
+#rosterMine,#rosterOp{padding-top:5px}
+.hdr .tag{font-size:10px;padding:1px 6px;border-radius:3px;font-weight:700}
+.hdr .tag.ct{color:#e6e7e9;background:rgba(91,143,212,.2);border:1px solid #383940}
+.hdr .tag.terr{color:#ffe9b8;background:rgba(216,168,60,.2);border:1px solid #6b5722}
+.pl{height:80px;display:flex;flex-direction:column;justify-content:center;gap:3px;
+    padding:6px 10px 6px 13px;position:relative;
+    margin:0 6px 5px;border-radius:6px;
+    background-color:rgba(255,255,255,.045);background-image:var(--tex);background-size:var(--texsize);
+    overflow:hidden;transition:background-color .12s}
+.pl::before{content:'';position:absolute;inset:-40%;z-index:0;pointer-events:none;
+  background-image:var(--haze);background-size:200% 200%;
+  animation:haze 22s ease-in-out infinite alternate}
+@keyframes haze{
+  0%{background-position:0% 0%}
+  50%{background-position:90% 50%}
+  100%{background-position:35% 95%}
+}
+.pl.rrow{flex-direction:column}
+.pl:hover{background-color:#202020}
+/* 整格血条：宽度=血量，颜色随阵营 */
+.pl .hpfill{position:absolute;left:0;top:0;bottom:0;z-index:0;transition:width .15s linear}
+.pl.ct .hpfill{background:rgba(91,143,212,.16)}
+.pl.terr .hpfill{background:rgba(216,168,60,.16)}
+.pl.rrow .hpfill{left:auto;right:0}
+.pl.crit .hpfill{background:rgba(255,85,85,.20)!important}
+.pl .stripe{position:absolute;left:0;top:0;bottom:0;width:3px;z-index:2}
+.pl.rrow .stripe{left:auto;right:0}
+.pl.ct .stripe{background:var(--ct)}
+.pl.terr .stripe{background:var(--terr)}
+.pl.dead{background:#141517;border-color:#1f2023}
+.pl.dead .hpfill{display:none}
+.pl.dead .r1,.pl.dead .r23{opacity:.28}
+.pl.dead .stripe{display:none}
+/* 三层：①ID+生命 ②下两行（KDA/金钱 左 · 武器 中垂直居中 · 护甲 右） */
+.pl .r1{display:flex;align-items:center;gap:6px;width:100%;position:relative;z-index:1;
+        min-width:0;flex:0 0 auto}
+.pl .r23{display:flex;align-items:center;gap:8px;width:100%;position:relative;z-index:1;
+         flex:1 1 auto;min-height:0}
+.pl .r23L{display:flex;flex-direction:column;gap:1px;flex:0 0 auto;justify-content:center}
+.pl .r23b{display:flex;align-items:center;gap:5px}
+.pl.rrow .r1,.pl.rrow .r23{flex-direction:row-reverse}
+.pl.rrow .r23L{align-items:flex-end}
+.pl .idx{font-size:11.5px;font-weight:800;color:#fff;background:rgba(255,255,255,.12);
+         padding:1.5px 5px;border-radius:3px;min-width:19px;text-align:center;flex:0 0 auto}
+.pl.ct .idx{background:rgba(91,143,212,.30);color:#e8e8e8}
+.pl.terr .idx{background:rgba(216,168,60,.30);color:#ffe9b8}
+.pl .nm{font-size:15.5px;font-weight:700;flex:0 1 auto;min-width:0;overflow:hidden;
+        text-overflow:ellipsis;white-space:nowrap;color:#f5f5f5;letter-spacing:.01em}
+.pl .kd{font-size:13.5px;color:#b4b4b4;font-variant-numeric:tabular-nums;
+        font-weight:700;letter-spacing:.02em}
+.pl .money{font-size:12px;color:#8c8c90;font-variant-numeric:tabular-nums;
+           font-weight:600;flex:0 0 auto}
+.pl .st{display:flex;gap:3px;align-items:center;flex:0 0 auto}
+.pl .sp{flex:1 1 auto;min-width:4px}
+/* 武器：第三行中间 */
+.pl .wp{flex:1 1 auto;display:flex;align-items:center;justify-content:center;
+        width:66px;height:26px;min-width:0}
+.pl .wp i{width:66px;height:26px}
+/* 生命：第一行右侧大字 */
+.pl .hpv{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;
+         color:#fff;line-height:1;letter-spacing:-.02em;flex:0 0 auto}
+.pl.crit .hpv{color:#ff6b6b}
+.pl .armi{display:flex;align-items:center;min-width:15px;flex:0 0 auto}
+.bd{font-size:9px;padding:0 3px;border-radius:2px;line-height:13px;border:1px solid}
+.bd.flash{color:#fff;border-color:#8c8c8f;background:#2d2d31}
+.bd.bomb{color:#ff8a5c;border-color:#6b3018}
+.bd.def{color:var(--grn);border-color:#2c4a2c}
+.wi{display:inline-block;vertical-align:-2px;background:currentColor;
+    -webkit-mask-size:contain;-webkit-mask-repeat:no-repeat;-webkit-mask-position:center;
+    mask-size:contain;mask-repeat:no-repeat;mask-position:center}
+.wi.wpn{width:16px;height:16px;opacity:.9;margin-right:3px}
+.wi.armi{width:12px;height:12px;opacity:.85}
+.wi.c4i{width:14px;height:14px}
+.wi.defi{width:12px;height:12px;color:#7bd44b}
+.wi.asti{width:12px;height:12px;color:#7bd44b;margin:0 2px}
+.wi.kfi{width:13px;height:13px;color:#c9c9cc;margin-left:3px}
+.kft{font-size:8.5px;padding:0 3px;border-radius:2px;line-height:12px;margin-left:3px;
+     color:#c9c9cc;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.18)}
+
+.legend{position:absolute;left:6px;bottom:6px;background:rgba(0,0,0,.78);border:1px solid #232323;
+        border-radius:3px;padding:3px 7px;font-size:9.5px;color:var(--dim);line-height:1.7;pointer-events:none}
+.legend b{color:var(--txt)}
+
+/* ===== RWS / 击杀日志 独占一行 ===== */
+#logcol{flex:1 1 auto;min-width:310px;display:flex;flex-direction:column;min-height:0;
+        border-left:1px solid var(--line);background:rgba(16,17,18,.64);backdrop-filter:blur(7px)}
+#logcol .pane{display:flex;flex-direction:column;min-height:0;overflow:hidden;background:transparent}
+#logcol .pane+.pane{border-top:1px solid var(--line)}
+/* 击杀日志一行约 32px、RWS 一行约 20px，同样条数需要的空间差一倍多，不能对半分 */
+#paneKf{flex:1.8 1 0}
+#paneRws{flex:1 1 0}
+.pane .pt{font-size:10.5px;color:#8a8a8e;padding:5px 10px 3px;letter-spacing:.06em;flex:0 0 auto;
+          border-bottom:1px solid #212224;display:flex;justify-content:space-between;background:var(--raise)}
+.pane .pt b{color:#c9c9cc;font-weight:600}
+.pane .pc{flex:1;overflow-y:auto;padding:4px 10px 8px}
+.rw{display:flex;align-items:center;gap:7px;font-size:11px;padding:1.5px 0;color:#9a9a9e}
+.rw .n{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rw .v{font-variant-numeric:tabular-nums;color:#dfe0e2;font-weight:700;min-width:32px;text-align:right}
+.rw .v2{font-variant-numeric:tabular-nums;color:#636366;min-width:36px;text-align:right;font-size:10px}
+.rw .bar{width:60px;height:4px;background:#212224;border-radius:2px;overflow:hidden;flex:0 0 60px}
+.rw .bar i{display:block;height:100%;background:var(--ct)}
+.rw.me .n{color:#fff;font-weight:700}
+.kl{font-size:13px;padding:6px 0;border-bottom:1px solid #1c1d20;line-height:1.5;color:#b8b8b8;
+    display:flex;gap:9px;align-items:baseline}
+.kl .t{color:#5c5c60;font-variant-numeric:tabular-nums;flex:0 0 38px;font-size:11.5px}
+.kl .body{flex:1;display:flex;align-items:center;gap:3px;flex-wrap:wrap;min-width:0}
+.kl b{color:#fff;font-weight:600;font-size:13px}
+.kl .ar{color:#6a6a6e;margin:0 2px}
+.kl .a{color:var(--grn);font-size:12px}
+.kl .w{color:#c0975a;font-size:12px;margin-left:1px}
+.kl .plus{color:#6a6a6e;margin:0 2px 0 4px;font-weight:700}
+.kl .hs{color:#ffd166}
+.kl.boom{background:rgba(255,90,40,.10);border-left:2px solid #ff6a30;padding-left:7px}
+
+/* ===== 底部：回合条 + 时间轴 ===== */
+#bottom{background:rgba(18,19,21,.60);backdrop-filter:blur(7px);border-top:1px solid var(--line)}
+#raWrap{display:flex;justify-content:center;padding:7px 0 3px}
+#roundaxis{position:relative;height:96px;display:grid;grid-template-rows:38px 20px 38px;user-select:none}
+#raTop,#raBot,#raLine{position:relative}
+#raLine::before{content:'';position:absolute;left:0;right:0;top:50%;height:1px;background:#3c3d40}
+.ra-ic{position:absolute;transform:translateX(-50%);width:24px;height:24px;cursor:pointer;
+       display:flex;align-items:center;justify-content:center;border-radius:3px;transition:transform .1s}
+.ra-ic:hover{transform:translateX(-50%) scale(1.2)}
+.ra-ic svg{width:20px;height:20px;display:block}
+.ra-ic i{width:20px;height:20px}
+.ra-ic.up{bottom:2px}
+.ra-ic.dn{top:2px}
+.ra-ic.ctc{color:#7fb0e8}
+.ra-ic.terrc{color:#e8c069}
+.ra-loss{position:absolute;transform:translateX(-50%);width:3px;height:3px;border-radius:50%;
+         background:#474749}
+.ra-loss.up{bottom:9px}
+.ra-loss.dn{top:9px}
+.ra-tick{position:absolute;transform:translateX(-50%);font-size:10px;color:#8d8d90;
+         font-variant-numeric:tabular-nums;top:1px;pointer-events:none}
+.ra-tickline{position:absolute;transform:translateX(-50%);width:1px;height:7px;background:#3c3d40;
+             top:50%;margin-top:-3px}
+.ra-half{position:absolute;top:-5px;bottom:-5px;width:0;border-left:1px dashed rgba(255,255,255,.26)}
+.ra-half span{position:absolute;left:6px;top:50%;transform:translateY(-50%);white-space:nowrap;
+              font-size:9.5px;color:rgba(255,255,255,.58);letter-spacing:.05em}
+.ra-cur{position:absolute;top:-6px;bottom:-6px;background:rgba(255,255,255,.055);
+        border-left:1px solid rgba(255,255,255,.3);border-right:1px solid rgba(255,255,255,.3);
+        pointer-events:none;border-radius:2px}
+
+#ctrl{display:flex;align-items:center;gap:16px;padding:10px 16px 13px;
+      border-top:1px solid #232427;background:rgba(13,14,16,.34)}
+.cLeft{display:flex;flex-direction:column;gap:6px;flex:0 0 auto;justify-content:center}
+.cRow{display:flex;align-items:center;gap:8px}
+.cRow:first-child{justify-content:space-between}
+.cRow .cbtn2{white-space:nowrap}
+.cSep{width:1px;height:15px;background:#2f2f2f;flex:0 0 auto;margin:0 4px}
+.cRight{display:flex;align-items:center;gap:12px;flex:0 0 auto}
+/* 大播放键 */
+.bigplay{width:44px;height:44px;border-radius:50%;background:#1c1c1c;border:1px solid #313131;
+         color:#dfdfdf;font-size:17px;display:flex;align-items:center;justify-content:center;
+         cursor:pointer;transition:background .16s,border-color .16s,transform .12s;padding:0;line-height:1}
+.bigplay:hover{background:#262626;border-color:#5b8fd4;color:#fff}
+.bigplay:active{transform:scale(.95)}
+.cbtn2{padding:8px 15px;font-size:12px;border-radius:6px}
+/* 开关（轨迹） */
+.tgl{display:inline-flex;align-items:center;gap:7px;cursor:pointer;user-select:none}
+.tgl>input{display:none}
+.tglTrack{width:36px;height:19px;border-radius:10px;background:#262626;
+          border:1px solid #333333;position:relative;transition:.18s;flex:0 0 auto}
+.tglKnob{position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;
+         background:#7d7d7d;transition:.18s}
+.tgl>input:checked+.tglTrack{background:#3a3a3a;border-color:#4a4a4a}
+.tgl>input:checked+.tglTrack .tglKnob{left:20px;background:#d0d0d0}
+.tglLbl{font-size:11.5px;color:#8d8e92;letter-spacing:.02em}
+button{background:#1a1b1c;color:var(--txt);border:1px solid #2c2d2f;border-radius:4px;
+       padding:4px 11px;cursor:pointer;font-size:11.5px;font-family:inherit}
+button:hover{border-color:var(--ct);color:var(--ct)}
+.sw{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--dim);cursor:pointer;user-select:none}
+.sw input{accent-color:var(--ct);margin:0}
+#tlwrap{flex:1;position:relative;height:76px;min-width:0}
+.tlrow{position:absolute;left:0;right:0;height:38px;pointer-events:none}
+#tlTop{top:0}
+#tlBot{bottom:0}
+.tlrow .lbl{position:absolute;left:0;top:2px;font-size:10px;color:#8a8a8e;z-index:2;
+            background:rgba(0,0,0,.85);padding:0 4px;border-radius:2px}
+.tlt{position:absolute;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent}
+#tlTop .tlt{bottom:0;border-top:10px solid currentColor}
+#tlBot .tlt{top:0;border-bottom:10px solid currentColor}
+/* #tlaxis top28 height20 → 滑块轨道中心恰在 38px；上轨 0-38 尖端=38，下轨 38-76 尖端=38 */
+#tlaxis{position:absolute;left:0;right:0;top:28px;height:20px}
+#tlticks{position:absolute;left:0;right:0;top:2px;height:16px;pointer-events:none}
+#tlticks .tx{position:absolute;font-size:10.5px;color:#99999c;transform:translateX(-50%);
+             font-variant-numeric:tabular-nums;text-shadow:0 1px 2px #000}
+#tlticks .tk{position:absolute;top:0;width:1px;height:5px;background:#3a3a3a;transform:translateX(-50%)}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:20px;background:transparent;
+                  margin:0;padding:0;position:relative;z-index:3;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:2px;background:#333;border-radius:1px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:3px;height:22px;background:#eaebec;
+   margin-top:-10px;border-radius:1px;box-shadow:0 0 7px rgba(255,255,255,.75)}
+input[type=range]::-moz-range-track{height:2px;background:#333}
+input[type=range]::-moz-range-thumb{width:3px;height:22px;background:#eaebec;border:none;border-radius:1px}
+#clock{font-variant-numeric:tabular-nums;color:#8a8a8e;font-size:11.5px;min-width:84px;text-align:right}
+a.back{color:#8a8a8e;font-size:11px;text-decoration:none}
+
+/* ===== TAB ===== */
+#tabpanel{position:fixed;inset:0;background:rgba(0,0,0,.92);backdrop-filter:blur(4px);
+          display:none;align-items:center;justify-content:center;z-index:50}
+#tabpanel.on{display:flex}
+#tabpanel .inner{width:min(1560px,98vw);max-height:94vh;display:flex;flex-direction:column;
+                 background:#0b0b0b;border:1px solid #2a2a2a;border-radius:6px;overflow:hidden;
+                 box-shadow:0 22px 60px rgba(0,0,0,.85)}
+#tabbody{overflow-y:auto}
+.chartbar{display:flex;align-items:center;gap:6px;padding:8px 14px;background:#0d0d0d;
+          border-bottom:1px solid #242424;position:sticky;top:0;z-index:2;flex-wrap:wrap}
+.chartbar .clab{font-size:10.5px;color:#8a8a8e;letter-spacing:.06em;margin-right:4px}
+.cbtn{background:#1a1b1c;color:#a8a8ab;border:1px solid #2c2d2f;border-radius:3px;
+      padding:2px 9px;font-size:10.5px;cursor:pointer;font-family:inherit}
+.cbtn.on{background:#2f3033;color:#e6e7e9;border-color:#3a3b3e}
+.cbtn:hover{border-color:#454649}
+.cleg{margin-left:auto;font-size:9.5px;color:#8a8a8d;display:flex;align-items:center;gap:5px}
+.cleg b{display:inline-block;width:8px;height:8px;border-radius:1px}
+.cleg .lm{background:#5b8fd4}
+.cleg .lo{background:#d8a83c}
+.cleg .lw{background:#7bd44b}
+.cleg .ll{background:#3c3c3f}
+.cleg .lc{background:#ffd166}
+.csel{background:#1a1b1c;color:#dfe0e2;border:1px solid #2c2d2f;border-radius:3px;
+      padding:2px 6px;font-size:11px;font-family:inherit;max-width:140px}
+#chart{height:428px;padding:8px 14px 0;background:#0f1011;position:relative;
+       overflow-x:auto;overflow-y:hidden}
+.csvg{display:block;overflow:visible}
+.csvg .cnx{font-size:9px;fill:#636366;text-anchor:middle;font-variant-numeric:tabular-nums}
+.csvg .cht{font-size:8px;fill:#ffd166;text-anchor:middle;font-weight:700}
+.tabhead{display:flex;align-items:center;justify-content:space-between;padding:9px 14px;
+         background:#151618;border-bottom:1px solid #26272a;
+         position:sticky;top:0;z-index:3}
+.tabs{display:flex;gap:3px}
+.tt{background:transparent;color:#8a8a8e;border:1px solid transparent;border-radius:4px;
+    padding:5px 15px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600}
+.tt:hover{color:#c9c9cc;background:#1f2023}
+.tt.on{background:#2b2c30;color:#fff;border-color:#3c3c3c}
+.thint{font-size:11px;color:#6a6a6e}
+/* 道具表：总数据 / 本回合分组 */
+.utab thead tr.grp th{font-size:9.5px;letter-spacing:.05em;color:#787878;
+                      padding:6px 10px 2px;border-bottom:none;font-weight:600}
+.utab .gTotal{text-align:left}
+.utab .gCur{text-align:left;border-left:2px solid #3d3d3d;background:rgba(255,255,255,.03)}
+.utab th.sect,.utab td.sect{border-left:2px solid #3d3d3d;background:rgba(255,255,255,.028)}
+#chart svg{display:block;margin:0 auto}
+.chartbar{display:flex;align-items:center;gap:7px;padding:11px 14px;flex-wrap:wrap;
+          border-bottom:1px solid #222326}
+.chartbar .clab{font-size:10.5px;color:#8a8a8e;letter-spacing:.06em;margin-right:4px}
+.cbtn{background:#1c1d1f;color:#a8a8ab;border:1px solid #2d2e31;border-radius:4px;
+      padding:3px 11px;font-size:11px;cursor:pointer;font-family:inherit}
+.cbtn.on{background:#2b2c30;color:#fff;border-color:#414141}
+.cbtn:hover{border-color:#4a4a4a}
+.cleg{margin-left:auto;font-size:9.5px;color:#828286;display:flex;align-items:center;gap:5px}
+.cleg b{display:inline-block;width:9px;height:9px;border-radius:2px}
+.cleg .lm{background:#4a7fb5}
+.cleg .lc{background:#ffd166;height:3px}
+.cleg .lw{background:#7bd44b}
+.chartbar .cleg b.ll{background:#353639}
+/* RWS 全员详情条 */
+.rwsdet{display:none;gap:6px;flex-wrap:wrap;align-items:center;
+        padding:9px 14px;border-bottom:1px solid #222326;font-size:11px;background:#101112}
+.rdLab{color:#8a8a8e;font-size:10px;letter-spacing:.05em;margin-right:4px}
+.rdIt{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:4px;
+      background:#17181a;border:1px solid #26272a;color:#b9b9b9;font-size:11px}
+.rdIt b{color:var(--c);font-weight:800;font-size:10px}
+.rdIt i{color:#e0a458;font-style:normal;font-weight:700;
+        font-variant-numeric:tabular-nums;margin-left:2px}
+.rdIt.me{border-color:#3d3d3d;background:#1e1f22}
+.csel{background:#1c1d1f;color:#dfe0e2;border:1px solid #2d2e31;border-radius:4px;
+      padding:3px 8px;font-size:11.5px;font-family:inherit;max-width:150px}
+/* 回合表现轴（面板底部常驻） */
+#perfAxis{position:sticky;bottom:0;background:#0d0e0f;border-top:1px solid #2a2b2e;
+          padding:8px 14px 10px;z-index:4}
+.paHead{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.paHint{font-size:10px;color:#5f5f5f;margin-left:auto;letter-spacing:.03em}
+.paTitle{font-size:10px;color:#6f6f6f;letter-spacing:.06em}
+.paScroll{overflow-x:auto;overflow-y:hidden;padding-bottom:2px}
+.paInner{position:relative;margin:0 auto}
+.paTop,.paBot{position:relative;height:74px}
+.paLine{position:relative;height:24px;border-top:1px solid rgba(160,155,150,.30);
+        border-bottom:1px solid rgba(160,155,150,.30)}
+.paIc{position:absolute;transform:translateX(-50%);width:17px;height:17px;
+      display:flex;align-items:center;justify-content:center}
+.paTop .paIc{bottom:1px}
+.paBot .paIc{top:1px}
+.paI{width:14px;height:14px}
+.paIc.up .paI{color:#8cb8e0}
+.paIc.dn .paI{color:#a84f4a;opacity:.85}
+.paIc.hs .paI{color:#ffd166;filter:drop-shadow(0 0 7px rgba(255,209,102,.8))}
+.paNum{position:absolute;top:5px;transform:translateX(-50%);font-size:9.5px;color:#636366;
+       cursor:pointer;font-variant-numeric:tabular-nums;z-index:2;padding:0 2px}
+.paNum:hover{color:#c9c9cc}
+.paNum.on{color:#fff;font-weight:700;background:rgba(255,255,255,.12);border-radius:2px}
+.paTick{position:absolute;top:0;bottom:0;width:1px;background:rgba(160,155,150,.09);
+        transform:translateX(-50%)}
+.paWin{position:absolute;bottom:0;height:2px;background:#7bd44b;opacity:.92}
+.paCell{position:absolute;top:0;bottom:0;cursor:pointer;z-index:3}
+.paCell:hover{background:rgba(255,255,255,.055)}
+.paHalf{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.32);z-index:2}
+.rpWrap{padding:22px 30px 14px}
+.rpTitle{text-align:center;font-size:15px;color:rgba(220,220,222,.78);
+         letter-spacing:.06em;margin-bottom:8px}
+.rpBar{display:flex;align-items:center;gap:14px;justify-content:center;margin-bottom:16px}
+.rpStat{font-size:11.5px;color:#828286}
+.rpStat b{color:#dfe0e2;font-weight:700}
+.rpPlayPos{font-size:11.5px;color:#d6a05a;font-variant-numeric:tabular-nums;font-weight:600}
+.rpBody{position:relative;height:212px}
+.rpAxis{position:absolute;left:0;right:0;top:50%;height:1px;background:rgba(160,155,150,.35)}
+.rpEv{position:absolute;transform:translateX(-50%);width:24px;height:24px;
+      display:flex;align-items:center;justify-content:center;cursor:default}
+.rpEv.up{bottom:calc(50% + 7px)}
+.rpEv.dn{top:calc(50% + 7px)}
+.rpi{width:21px;height:21px}
+.rpEv.up .rpi{color:#dcdcdc;filter:drop-shadow(0 0 7px rgba(200,225,240,.55))}
+.rpEv.dn .rpi{color:#a84f4a;opacity:.82;filter:drop-shadow(0 0 5px rgba(170,60,55,.4))}
+.rpTick{position:absolute;top:calc(50% + 12px);transform:translateX(-50%);
+        font-size:11px;color:#6f6a68;font-variant-numeric:tabular-nums}
+.rpTickLine{position:absolute;top:calc(50% - 5px);width:1px;height:10px;
+            background:rgba(160,155,150,.35);transform:translateX(-50%)}
+.rpPlay{position:absolute;top:0;bottom:0;width:2px;background:#d6a05a;
+        box-shadow:0 0 10px rgba(214,160,90,.75);transform:translateX(-1px)}
+.rpStar{position:absolute;top:calc(50% + 5px);transform:translateX(-50%);
+        color:#e8e8e8;font-size:17px;line-height:1;
+        filter:drop-shadow(0 0 7px rgba(200,233,255,.8))}
+.th2{padding:11px 14px 5px;font-size:10.5px;color:#8a8a8e;letter-spacing:.06em;
+     border-top:1px solid #262626;margin-top:2px;background:#0d0d0d;position:sticky;top:0}
+#tabpanel h3{margin:0;padding:10px 14px;font-size:12.5px;border-bottom:1px solid #242424;
+             display:flex;justify-content:space-between;align-items:center;color:#c9c9cc;letter-spacing:.04em}
+#tabpanel .close{cursor:pointer;color:var(--dim);font-size:11.5px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+.utab{table-layout:fixed}
+.utab th:first-child,.utab td:first-child{width:150px;padding-left:14px}
+.utab th:last-child,.utab td:last-child{padding-right:14px}
+.utab tbody tr.tm td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+th,td{padding:7px 10px;border-bottom:1px solid #171717}
+thead th{padding:7px 10px;color:#7a7a7a;font-weight:500;font-size:10px;
+         letter-spacing:.05em;background:#0b0b0b;text-align:right;
+         border-bottom:1px solid #2c2c2c;white-space:nowrap}
+tbody td{padding:8px 10px;vertical-align:middle}
+th:first-child,td:first-child{text-align:left}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.tm td{padding:14px 10px 6px;background:transparent;font-weight:700;
+         font-size:10.5px;letter-spacing:.07em;border-bottom:none}
+tr.tm[style] td{background:transparent}
+tr.me td{background:rgba(255,209,102,.05)}
+tr.sel td{background:rgba(255,209,102,.13);font-weight:600}
+#loading{position:fixed;inset:0;background:var(--deep);display:flex;align-items:center;justify-content:center;
+         color:var(--dim);font-size:13px;z-index:99}
+/* ===== 统一美术层 ===== */
+:root{
+  --ui-r:6px;--ui-bd:#272727;--ui-bd2:#3a3a3a;
+  --ui-bg2:#171717;--ui-bg3:#1f1f1f;--ui-tx2:#9f9f9f;
+}
+button{border-radius:var(--ui-r);background:var(--ui-bg3);border:1px solid var(--ui-bd);
+       color:var(--ui-tx2);transition:background .14s,border-color .14s,color .14s}
+button:hover{background:#262626;border-color:var(--ui-bd2);color:var(--txt)}
+button:active{transform:translateY(1px)}
+.cbtn{border-radius:5px;padding:5px 12px;font-size:11.5px}
+.cbtn.on{background:#2a2a2a;border-color:#4a4a4a;color:#e8e8e8}
+.cbtn:hover{background:#262626}
+.csel{border-radius:5px;background:var(--ui-bg2);border-color:var(--ui-bd);color:var(--txt)}
+#tabpanel{border:1px solid var(--ui-bd);border-radius:8px}
+#logcol{border-left-color:var(--ui-bd)}
+.pane .pt{border-bottom-color:var(--ui-bd)}
+.kl{border-bottom-color:#1a1c1f}
+#perfAxis{border-top-color:var(--ui-bd)}
+/* 缩放提示 */
+#wrap{position:relative}
+#zoomLbl{position:absolute;right:10px;top:10px;font-size:11px;color:#e8e8e8;
+         background:rgba(20,30,40,.85);border:1px solid #4a4a4a;border-radius:4px;
+         padding:2px 8px;pointer-events:none;opacity:0;transition:opacity .2s;
+         font-variant-numeric:tabular-nums;z-index:3}
+#zoomTip{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);
+         font-size:10.5px;color:#828282;background:rgba(0,0,0,.66);
+         padding:4px 11px;border-radius:11px;pointer-events:none;
+         opacity:0;transition:opacity .25s;z-index:3;white-space:nowrap}
+#wrap:hover #zoomTip{opacity:1}
+/* 变速控制：外框 6px，内缩 2px，选中块 4px 圆角（同心，不露直角） */
+.spd{display:flex;border:1px solid var(--ui-bd);border-radius:var(--ui-r);
+     overflow:hidden;background:var(--ui-bg2);padding:2px;gap:1px;isolation:isolate}
+.spdb{border:0!important;border-radius:4px!important;background:transparent!important;
+      padding:5px 9px;font-size:11.5px;color:var(--ui-tx2);line-height:1;
+      transition:background .14s,color .14s}
+.spdb:hover{background:#242424!important;color:var(--txt)!important}
+.spdb.on{background:#2c2c2c!important;color:#e8e8e8!important;font-weight:600;
+         box-shadow:inset 0 0 0 1px #3a3a3a}
+/* 时钟与返回 */
+#clock{font-variant-numeric:tabular-nums;color:var(--ui-tx2);font-size:12px;
+       min-width:92px;text-align:right;letter-spacing:.02em}
+/* 左上角返回主页 */
+#topbar .home{position:absolute;left:12px;top:50%;transform:translateY(-50%);
+  width:28px;height:28px;display:flex;align-items:center;justify-content:center;
+  border-radius:6px;border:1px solid var(--ui-bd);background:var(--ui-bg3);
+  color:var(--ui-tx2);text-decoration:none;font-size:14px;line-height:1;z-index:5;
+  transition:background .14s,border-color .14s,color .14s}
+#topbar .home:hover{background:#262626;border-color:var(--ui-bd2);color:var(--txt)}
+/* 滚动条统一 */
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#2d2d2d;border-radius:4px;border:2px solid transparent;
+                          background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:#3e3e3e;background-clip:content-box}
+::-webkit-scrollbar-corner{background:transparent}
+/* 交互完善：键盘焦点 / 禁用态 */
+button:focus-visible,.tt:focus-visible,.cbtn:focus-visible,.spdb:focus-visible,
+.csel:focus-visible,a.home:focus-visible,input[type=range]:focus-visible{
+  outline:2px solid #6f6f6f;outline-offset:1px}
+button:disabled{opacity:.42;cursor:not-allowed;transform:none!important}
+.tt,.cbtn,.csel,.spdb{border-radius:5px}
+#tabpanel,#perfAxis{border-radius:8px}
+/* ================= 瑞士编辑式布局层（回放页） =================
+   与主页同一套规则：去容器、细线 + 大留白分区、字号拉层级。
+   背景图、烟雾、阵营色、血条这些功能性元素保留。 */
+:root{
+  --tint:6,6,7;
+  --cap:10.5px;
+  --bgC:rgb(var(--tint));
+  --ov1:rgba(255,255,255,.06);
+  --ov2:rgba(255,255,255,.12);
+  --rule:rgba(255,255,255,.15);
+  --rule-soft:rgba(255,255,255,.07);
+  /* 旧变量接过来，避免硬编码的面板色脱队 */
+  --bg:var(--bgC);
+  --panel:var(--bgC);
+  --panel2:var(--bgC);
+  --line:var(--rule);
+  --raise:var(--bgC);
+  --deep:var(--bgC);
+}
+
+/* 顶栏：拆掉渐变块和毛玻璃，只留一条下缘细线 */
+#topbar{background:none!important;border-bottom:1px solid var(--rule)!important;
+        -webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+#topbar::after{display:none!important}
+.tbox.l::before,.tbox.r::before{display:none!important}
+#mid{background:none!important;border-left:1px solid var(--rule)!important;
+     border-right:1px solid var(--rule)!important}
+.sc{font-size:34px;font-weight:800;letter-spacing:-.03em}
+
+/* 两侧名单：去色块与模糊，用细线与地图分开 */
+.roster{background:none!important;-webkit-backdrop-filter:none!important;
+        backdrop-filter:none!important}
+#left{border-right:1px solid var(--rule)!important}
+#right{border-left:1px solid var(--rule)!important}
+.hdr{background:none!important;border-bottom:1px solid var(--rule)!important;
+     padding:8px 19px 7px!important;
+     font-size:var(--cap);letter-spacing:.10em;text-transform:uppercase;color:#8b8985}
+
+/* 玩家格：从"小圆角块"变成列表行，血条仍铺在行底 */
+.pl{background:none!important;border:0!important;border-radius:0!important;
+    border-bottom:1px solid var(--rule-soft)!important;
+    margin:0!important;padding:6px 13px 6px 16px!important}
+.pl.rrow{border-radius:0!important}
+.pl:hover{background:rgba(255,255,255,.035)!important}
+.pl .stripe{width:2px!important}
+
+/* 日志列：去色块，左侧一条线 */
+#logcol{background:none!important;-webkit-backdrop-filter:none!important;
+        backdrop-filter:none!important;border-left:1px solid var(--rule)!important}
+.pane .pt{background:none!important;border-bottom:1px solid var(--rule)!important;
+          font-size:var(--cap);letter-spacing:.10em;text-transform:uppercase;color:#8b8985}
+.kl{border-bottom:1px solid var(--rule-soft)!important}
+.kl.boom{background:rgba(255,90,40,.07)!important;border-left:2px solid #ff6a30!important}
+
+/* 底部条与控件 */
+#bottom{background:none!important;-webkit-backdrop-filter:none!important;
+        backdrop-filter:none!important;border-top:1px solid var(--rule)!important}
+button{border-radius:2px!important}
+#tabpanel,#perfAxis{border-radius:2px!important}
+
+/* 背景遮罩：面板拆掉之后文字直接压在背景图上，可读性不够。
+   这层在背景之上、内容（z-index:1）之下，糊开并压暗，但保留明暗可见。 */
+#veil{position:fixed;inset:0;z-index:0;pointer-events:none;
+      background:rgba(var(--tint),.54);
+      -webkit-backdrop-filter:blur(9px) saturate(.92);
+      backdrop-filter:blur(9px) saturate(.92)}
+
+/* 控件跟主题色走 */
+.cbtn,.tt,.csel,.spdb{background:linear-gradient(var(--ov1),var(--ov1)),rgb(var(--tint))!important;
+                      border-color:var(--rule)!important}
+.cbtn:hover,.tt:hover:not(:disabled){background:linear-gradient(var(--ov2),var(--ov2)),rgb(var(--tint))!important}
+
+/* 版心收窄到不出横向滚动：地图是 1:1，两侧名单 + 日志列挤掉的那部分从它们身上让 */
+.roster{flex:0 0 244px!important}
+/* ==== 名字 / 列表文字 / 按钮 / tab 面板：全部跟主题走 ==== */
+.pl .nm{color:var(--txt)!important}
+.pl .kd{color:var(--dim)!important}
+.pl .money{color:var(--dim)!important}
+.pl .hpv{color:var(--txt)!important}
+.pl .idx{color:var(--txt)!important;background:var(--track)!important}
+.cbtn,.tt,.csel,.spdb,.cbtn2{
+  background:linear-gradient(var(--ov1),var(--ov1)),rgb(var(--tint))!important;
+  border-color:var(--rule)!important;color:var(--dim)!important}
+.cbtn:hover,.tt:hover:not(:disabled),.cbtn2:hover{
+  background:linear-gradient(var(--ov2),var(--ov2)),rgb(var(--tint))!important;
+  color:var(--txt)!important}
+.cSep{background:var(--rule)!important}
+.chartbar .clab{color:var(--dim)!important}
+#tabpanel{background:rgba(var(--tint),.94)!important}
+#tabpanel .inner{background:rgb(var(--tint))!important;border-color:var(--rule)!important}
+
+/* 阵营色是功能色：色相不能换，否则 CT/T 认不出来。
+   但浅色底上要用低明度版，饱和度也收一点，不然在浅底上会跳。 */
+html[data-theme="dark"]{
+  --ct:#5b8fd4; --terr:#d8a83c;
+  --ct-soft:rgba(91,143,212,.16); --terr-soft:rgba(216,168,60,.16);
+}
+html[data-theme="light"]{
+  --ct:#2f6394; --terr:#96690f;
+  --ct-soft:rgba(47,99,148,.13); --terr-soft:rgba(150,105,15,.13);
+}
+.pl.ct .hpfill{background:var(--ct-soft)!important}
+.pl.terr .hpfill{background:var(--terr-soft)!important}
+.pl.ct .stripe{background:var(--ct)!important}
+.pl.terr .stripe{background:var(--terr)!important}
+.pl.ct .idx{background:var(--ct-soft)!important;color:var(--txt)!important}
+.pl.terr .idx{background:var(--terr-soft)!important;color:var(--txt)!important}
+.pl.crit .hpfill{background:rgba(200,50,50,.20)!important}
+
+/* 统一美术层的 ui-* 变量接到主题：rgba 叠层表达"相对提亮/压暗"，
+   亮主题叠黑、暗主题叠白，两边都是相对父背景算的 */
+html[data-theme="dark"]{
+  --ui-bg2:rgba(255,255,255,.05); --ui-bg3:rgba(255,255,255,.08);
+  --ui-bd:rgba(255,255,255,.16);  --ui-bd2:rgba(255,255,255,.26);
+  --ui-tx2:var(--dim);
+}
+html[data-theme="light"]{
+  --ui-bg2:rgba(0,0,0,.05); --ui-bg3:rgba(0,0,0,.08);
+  --ui-bd:rgba(0,0,0,.22);  --ui-bd2:rgba(0,0,0,.32);
+  --ui-tx2:var(--dim);
+}
+.bigplay{background:var(--ui-bg3)!important;border-color:var(--ui-bd)!important;color:var(--txt)!important}
+.bigplay:hover{background:var(--ui-bg3)!important;border-color:var(--acc)!important;color:var(--txt)!important}
+.spdb.on{background:var(--ui-bg3)!important;color:var(--txt)!important;
+         box-shadow:inset 0 0 0 1px var(--ui-bd2)!important}
+.spdb:hover{background:var(--ui-bg2)!important;color:var(--txt)!important}
+#mid .c4{background:var(--ui-bg3)!important;border-color:var(--ui-bd)!important}
+/* 地图底：把主题色按 45% 掺进黑底 —— 亮主题下不再是一整块突兀的纯黑，
+   暗主题下 45% 黑掺黑等于没变 */
+#wrap canvas{background:linear-gradient(rgba(var(--tint),.45),rgba(var(--tint),.45)),#0c0c0d!important}
+/* C4 倒计时：语义色也要分两档，亮底用深橙 */
+html[data-theme="light"] #mid .c4.armed{
+  color:#8a3a12!important;background:#ffe4d4!important;border-color:#d99a76!important}
+html[data-theme="light"] #mid .c4.done{color:#1f6b1f!important;background:#e2f5e0!important;border-color:#9ecf9a!important}
+html[data-theme="light"] #mid .c4.loose{color:#7a5a00!important;background:#fdf4d8!important;border-color:#d9c07a!important}
+
+/* 布局：左右名单定宽 → 地图按高度定宽（1:1）→ 剩下的全给日志列自适应。
+   这样击杀播报再多，撑的也只是日志列自己，不会去挤地图。 */
+#stage{flex:0 0 auto!important;min-width:0!important}
+#wrap{height:100%!important;aspect-ratio:1/1!important;max-width:100%!important}
+#logcol{flex:1 1 auto!important;min-width:0!important;overflow:hidden}
+/* ===== 设计系统统一层 =====
+   这个页面的 CSS 是分很多轮堆出来的：字号 19 种、颜色 19 种、圆角 6/8/10px 混用。
+   这一层不改布局，只把「字 / 角 / 底 / 线」四件事拉回统一刻度。 */
+:root{
+  --t1:10.5px;   /* 标签、说明 */
+  --t2:12px;     /* 表头、次要值 */
+  --t3:13.5px;   /* 正文强调 */
+  --rr:3px;      /* 统一圆角 */
+}
+/* 1) 8~9.5px 全部提到 10.5 —— 那些在任何屏幕上都已经读不动 */
+.bd,.kft,.cleg,.ra-half span,.csvg .cnx,
+.utab thead tr.grp th,.csvg .cht{font-size:var(--t1)!important}
+/* 2) 10~11.5px 归一 */
+.hdr,.hdr .tag,.pane .pt,.rw .v2,.ra-tick,.tlrow .lbl,#tlticks .tx,
+.chartbar .clab,.cbtn,.rdLab,.rdIt b,.paHint,.paTitle,.paNum,.th2,
+thead th,tr.tm td,#zoomTip,.legend{font-size:var(--t1)!important}
+/* 3) 表头 12 */
+.tb th,thead th{font-size:var(--t2)!important}
+/* 4) 圆角统一：全部 3px，不再 6/8/10 混着来 */
+.pl,.cbtn,.tt,.tag,.rwsdet,.hdr,.pane,.tabhead,.csel,
+.bigplay,.spdb,.tabs,.cleg,.chip{border-radius:var(--rr)!important}
+/* 5) 面板底色统一：同一层的块用同一个透明度，别再每块不一样 */
+.pane,.roster,.tabhead,.perfAxis,.rwsdet{
+  background:rgba(255,255,255,.028)!important;
+  border:1px solid rgba(255,255,255,.075)!important;
+}
+/* 6) 按钮统一：一样的底、一样的边 */
+.cbtn,.tt,.csel,.spdb{
+  background:rgba(255,255,255,.045)!important;
+  border:1px solid rgba(255,255,255,.09)!important;
+  color:var(--dim)!important;
+}
+.cbtn.on,.tt.on,.spdb.on{
+  background:rgba(255,255,255,.11)!important;
+  border-color:rgba(255,255,255,.20)!important;
+  color:var(--txt)!important;
+}
+.cbtn:hover,.tt:hover,.spdb:hover{border-color:rgba(255,255,255,.22)!important;color:var(--txt)!important}
+/* ===== 布局重构层 =====
+   问题：① 玩家卡固定 80px，5 张只占上半，下方近一半是空的
+        ② 击杀日志面板很大但空状态贴左上角
+        ③ 数据面板是「全屏遮罩 + 居中弹窗」，盖掉整张地图
+        ④ 回合轴居中占中间 1/3，左右空着 */
+/* ① 玩家卡：定长 + 整列垂直居中 + 卡间留空隙（拉满反而空荡） */
+.roster{display:flex;flex-direction:column;min-height:0;justify-content:flex-start}
+#rosterMine,#rosterOp{display:flex;flex-direction:column;flex:0 0 auto;
+  gap:8px;justify-content:center;margin:auto 0;padding:6px 0}
+.roster .pl{flex:0 0 auto;height:74px!important;min-height:0;justify-content:center}
+/* ② 日志面板：标题固定、内容吃满剩余高度，空状态在内容区正中 */
+#logcol{justify-content:flex-start;gap:0}
+#paneKf{flex:1 1 auto;display:flex;flex-direction:column;min-height:0}
+#paneKf .pc{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;overflow-y:auto}
+#paneKf .pc .kl{flex:1 1 auto;display:flex;align-items:center;justify-content:center;
+  text-align:center;color:var(--dim);font-size:var(--t2);padding:0}
+/* RWS 面板固定高度，不再和日志抢空间 */
+#paneRws{flex:0 0 auto;max-height:46%}
+#paneRws .pc{overflow-y:auto}
+#logcol .nil,#logcol .logempty,#logcol .empty{
+  flex:1 1 auto;display:flex;align-items:center;justify-content:center;
+  text-align:center;color:var(--dim);font-size:var(--t2)}
+/* ③ 数据面板：全屏居中弹窗 + 半透明遮罩（不要抽屉） */
+#tabpanel{position:fixed!important;inset:0!important;height:auto!important;
+  display:none!important;align-items:center!important;justify-content:center!important;
+  background:rgba(0,0,0,.58)!important;
+  -webkit-backdrop-filter:blur(7px)!important;backdrop-filter:blur(7px)!important;
+  z-index:50}
+#tabpanel.on{display:flex!important}
+#tabpanel .inner{width:min(1180px,90vw)!important;max-height:88vh!important;
+  border-radius:3px!important;
+  border:1px solid rgba(255,255,255,.13)!important;
+  background:rgba(10,10,11,.965)!important;
+  box-shadow:0 24px 64px rgba(0,0,0,.72)!important}
+/* ④ 回合轴撑满宽度，刻度不再挤在中间 */
+#raWrap{justify-content:stretch!important;padding:8px 18px 4px!important}
+#roundaxis{margin:0 auto}
+/* ⑤ 控制栏：上面一排按钮/开关，下面一行速度滑块 */
+#ctrl{display:flex!important;align-items:center!important;gap:18px!important;
+  padding:4px 18px 10px!important}
+.cLeft{display:flex!important;flex-direction:column!important;
+  align-items:flex-start!important;gap:7px!important;flex:0 0 auto}
+.cTop{display:flex;align-items:center;gap:8px}
+.cTop .cbtn2{white-space:nowrap;font-size:var(--t1)!important;padding:4px 11px!important}
+.cTop .tgl{margin-left:4px}
+.cBot{display:flex;align-items:center;gap:12px;padding-left:2px}
+/* 面板内容左右留白，表格不贴边 */
+#tabbody{padding:0 36px 24px!important}
+#tabbody .inner,.tabhead{padding-left:0;padding-right:0}
+#tabPane{padding:0 4px}
+.utab,.tb,table{max-width:1080px;margin-left:auto;margin-right:auto}
+/* 速度滑块：轨道和圆点垂直居中 + 下方刻度 */
+.spdrail{display:flex;flex-direction:column;gap:2px;width:150px}
+#spdRange{-webkit-appearance:none;appearance:none;width:100%;height:14px;
+  background:transparent;border:0!important;outline:none;cursor:pointer;margin:0}
+#spdRange::-webkit-slider-runnable-track{height:3px;border-radius:2px;
+  background:rgba(255,255,255,.17)}
+#spdRange::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+  width:11px;height:11px;border-radius:50%;background:var(--txt);border:0;
+  margin-top:-4px;cursor:pointer;box-shadow:0 0 0 2px rgba(0,0,0,.5)}
+#spdRange::-moz-range-track{height:3px;border-radius:2px;background:rgba(255,255,255,.17)}
+#spdRange::-moz-range-thumb{width:11px;height:11px;border-radius:50%;
+  background:var(--txt);border:0;cursor:pointer}
+.spdticks{display:flex;justify-content:space-between;padding:0 1px;
+  font-size:9.5px;color:var(--dim);opacity:.6;line-height:1;
+  font-variant-numeric:tabular-nums}
+.spdlbl{font-size:var(--t1);color:var(--dim);font-variant-numeric:tabular-nums;
+  min-width:22px;text-align:right}
+/* 时间轴吃掉剩余宽度，时钟贴右 */
+#tlwrap{flex:1 1 auto!important;min-width:0!important}
+#ctrl .cRight{flex:0 0 auto;margin-left:auto}
+</style>
+
+<div id="loading">正在解析 demo…</div>
+
+<div id="veil"></div>
+<div id="topbar">
+  <a class="home" href="/" title="返回主页">←</a>
+  <div class="tbox l"><span class="sc" id="sMine">0</span><span class="sd" id="sdMine">CT</span></div>
+  <div id="mid">
+    <span class="rnd">第 <b id="rnum">1</b> 回合</span>
+    <span class="clk" id="clk">0:00</span>
+    <span class="c4" id="c4box">C4 —</span>
+  </div>
+  <div class="tbox r"><span class="sd" id="sdOp">T</span><span class="sc" id="sOp">0</span></div>
+</div>
+
+<div id="main">
+  <div class="roster" id="left">
+    <div class="hdr"><span>我方</span><span class="tag" id="tagMine">CT</span></div>
+    <div id="rosterMine"></div>
+  </div>
+  <div id="stage"><div id="wrap">
+    <canvas id="cv" width="1024" height="1024"></canvas>
+    <span id="zoomLbl"></span>
+    <div id="zoomTip">滚轮缩放 · 拖拽平移 · 双击复位</div>
+  </div></div>
+  <div class="roster" id="right">
+    <div class="hdr"><span>敌方</span><span class="tag" id="tagOp">T</span></div>
+    <div id="rosterOp"></div>
+  </div>
+  <div id="logcol">
+    <div class="pane" id="paneKf">
+      <div class="pt"><b>击杀日志</b><span id="kfcount"></span></div>
+      <div class="pc" id="kfBox"></div>
+    </div>
+    <div class="pane" id="paneRws">
+      <div class="pt"><b>RWS</b><span>本回合 / 场均</span></div>
+      <div class="pc" id="rwsBox"></div>
+    </div>
+  </div>
+</div>
+
+<div id="bottom">
+  <div id="raWrap"><div id="roundaxis">
+    <div id="raTop"></div>
+    <div id="raLine"></div>
+    <div id="raBot"></div>
+  </div></div>
+  <div id="ctrl">
+    <div class="cLeft">
+      <div class="cTop">
+        <button id="play" class="bigplay" title="播放 / 暂停（空格）">▶</button>
+        <button class="cbtn2" id="skip" title="跳到本回合开打（冻结结束）">回合开始</button>
+        <button class="cbtn2" id="nextkill" title="跳到本回合下一次击杀">下次击杀</button>
+        <button class="cbtn2" id="roundend" title="跳到本回合判定时刻">回合结束</button>
+      </div>
+      <div class="cBot">
+        <label class="tgl" title="显示移动轨迹">
+          <span class="tglLbl">轨迹</span>
+          <input type="checkbox" id="cTrail">
+          <span class="tglTrack"><span class="tglKnob"></span></span>
+        </label>
+        <span class="spdlbl" id="spdlbl">1×</span>
+        <div class="spdrail">
+          <input type="range" id="spdRange" min="0" max="4" step="1" value="2">
+          <div class="spdticks"><span>¼</span><span>½</span><span>1</span><span>2</span><span>4</span></div>
+        </div>
+      </div>
+    </div>
+    <div id="tlwrap">
+      <div class="tlrow" id="tlTop"><span class="lbl">我方</span></div>
+      <div id="tlaxis"><div id="tlticks"></div><input type="range" id="time" min="0" max="100" value="0" step="0.02"></div>
+      <div class="tlrow" id="tlBot"><span class="lbl">敌方</span></div>
+    </div>
+    <div class="cRight">
+      <span id="clock">0.0 / 0.0s</span>
+    </div>
+  </div>
+</div>
+
+<div id="tabpanel"><div class="inner">
+  <h3><span>本场数据</span><span class="close" id="tabclose">关闭 (Tab)</span></h3>
+  <div id="tabbody"></div>
+</div></div>
+
+<script>
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const bg=new Image();
+let D=null,R=null,cur=0,now=0,playing=false,raf=null,half=12;
+const vis={},opt={trail:false,shot:true,util:true,face:true,speed:1};
+const view={s:1,x:0,y:0};
+const $=s=>document.querySelector(s);
+const SVG={
+ t_killed:'<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.2c-3.1 0-5.2 2-5.2 4.7 0 1.6.7 2.7 1.9 3.4v2.2c0 .5.3.8.8.8h.7v1.3c0 .4.3.6.6.6h2.4c.3 0 .6-.2.6-.6v-1.3h.7c.5 0 .8-.3.8-.8V9.3c1.2-.7 1.9-1.8 1.9-3.4 0-2.7-2.1-4.7-5.2-4.7zM6 5.9a1.35 1.35 0 110 2.7 1.35 1.35 0 010-2.7zm4 0a1.35 1.35 0 110 2.7 1.35 1.35 0 010-2.7z"/></svg>',
+ ct_killed:'<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.2c-3.1 0-5.2 2-5.2 4.7 0 1.6.7 2.7 1.9 3.4v2.2c0 .5.3.8.8.8h.7v1.3c0 .4.3.6.6.6h2.4c.3 0 .6-.2.6-.6v-1.3h.7c.5 0 .8-.3.8-.8V9.3c1.2-.7 1.9-1.8 1.9-3.4 0-2.7-2.1-4.7-5.2-4.7zM6 5.9a1.35 1.35 0 110 2.7 1.35 1.35 0 010-2.7zm4 0a1.35 1.35 0 110 2.7 1.35 1.35 0 010-2.7z"/></svg>',
+ bomb_exploded:'<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 .6l1.7 4.4 4.3-1.3-2.5 4 4.1 2.3-4.4.9 1.5 4.2-4-2.1-3.9 2.1 1.4-4.2L3.8 10 0 7.7l4.4-1.3L2 3.7l4.3 1.3z"/></svg>',
+ bomb_defused:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M3.2 12.8L9 7M12.8 12.8L7 7"/><circle cx="2.3" cy="13.7" r="1.3"/><circle cx="13.7" cy="13.7" r="1.3"/><path d="M10.5 4.2L13 1.7M13 4.2L10.5 1.7"/></svg>',
+ time_ran_out:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="8" cy="8" r="6.2"/><path d="M8 4.4V8l2.6 1.6" stroke-linecap="round"/></svg>'
+};
+const SC=s=>(s==='CT'?'#5b8fd4':'#d8a83c'), CL=s=>(s==='CT'?'ct':'terr');
+/* 回合结束原因 → 图标：awpy 给的是 reason_name，跟 SVG 的 key 不是同一套命名，
+   之前直接 SVG[r.reason] 查不到就全落到 time_ran_out，看起来只剩两种 */
+const REASON_ICON={
+  terrorists_win:'ct_killed',    /* T 胜 = CT 被全歼 */
+  ct_win:'t_killed',             /* CT 胜 = T 被全歼 */
+  target_bombed:'bomb_exploded', /* 炸弹爆炸 */
+  bomb_defused:'bomb_defused',   /* 拆包 */
+  target_saved:'time_ran_out',   /* 时间耗尽 */
+};
+const reasonIcon=r=>SVG[REASON_ICON[r]||r]||SVG.time_ran_out;
+/* 击杀附加标记位：1盲狙 2混烟 4穿墙 8跳跃 16被闪
+   （revenge/dominated 字段在 CS2 仍存在，但只在死斗/军备竞赛启用，竞技恒为 0，不显示） */
+const KF=[[1,'noscope','盲狙'],[2,'smoke_kill','混烟'],[4,'penetrate','穿墙'],
+          [8,null,'跳'],[16,'blind_kill','被闪']];
+/* 特殊死亡原因的显示名 */
+const WCN={world:'坠落',taser:'电击枪',hegrenade:'手雷',inferno:'燃烧',
+           molotov:'燃烧瓶',incgrenade:'燃烧弹',smokegrenade:'烟雾弹',
+           flashbang:'闪光弹',decoy:'诱饵',knife:'刀',knife_t:'刀',c4:'C4'};
+/* CS2 原生 SVG 图标（从 pak01 vpk 提取） */
+let ICONS=new Set();
+fetch('/icons/index.json').then(r=>r.json()).then(a=>{ICONS=new Set(a);if(R)draw();}).catch(()=>{});
+const wi=(n,cls='')=>ICONS.has(n)
+  ?`<i class="wi ${cls}" style="-webkit-mask-image:url(/icons/${n}.svg);mask-image:url(/icons/${n}.svg)"></i>`:'';
+const WMAP={usp_silencer:'usp_silencer',m4a1_silencer:'m4a1_silencer',hkp2000:'hkp2000',
+  glock:'glock',p250:'p250',deagle:'deagle',fiveseven:'fiveseven',elite:'elite',tec9:'tec9',
+  ak47:'ak47',m4a1:'m4a1',galilar:'galilar',famas:'famas',aug:'aug',sg556:'sg556',
+  awp:'awp',ssg08:'ssg08',g3sg1:'g3sg1',scar20:'scar20',
+  mac10:'mac10',mp9:'mp9',mp7:'mp7',ump45:'ump45',p90:'p90',bizon:'bizon',mp5sd:'mp5sd',
+  nova:'nova',xm1014:'xm1014',mag7:'mag7',sawedoff:'sawedoff',m249:'m249',negev:'negev',
+  knife:'knife',knife_t:'knife_t',taser:'taser',c4:'c4'};
+const wIcon=w=>wi(ICO_ALIAS[w]||WMAP[w]||w,'wpn');
+/* 显示名 / 内部名 → 图标文件名 */
+const ICO_ALIAS={
+  'Glock-18':'glock','USP-S':'usp_silencer','P2000':'hkp2000','Desert Eagle':'deagle',
+  'P250':'p250','Five-SeveN':'fiveseven','Tec-9':'tec9','CZ75-Auto':'cz75a',
+  'Dual Berettas':'elite','R8 Revolver':'revolver',
+  'AK-47':'ak47','M4A1-S':'m4a1_silencer','M4A4':'m4a1','M4A1':'m4a1',
+  'Galil AR':'galilar','FAMAS':'famas','AUG':'aug','SG 553':'sg556',
+  'AWP':'awp','SSG 08':'ssg08','G3SG1':'g3sg1','SCAR-20':'scar20',
+  'MAC-10':'mac10','MP9':'mp9','MP7':'mp7','MP5-SD':'mp5sd','UMP-45':'ump45',
+  'P90':'p90','PP-Bizon':'bizon',
+  'Nova':'nova','XM1014':'xm1014','MAG-7':'mag7','Sawed-Off':'sawedoff',
+  'M249':'m249','Negev':'negev',
+  'Knife':'knife','Bayonet':'bayonet','Flip Knife':'knife_flip','Gut Knife':'knife_gut',
+  'Karambit':'knife_karambit','M9 Bayonet':'knife_m9_bayonet','Huntsman Knife':'knife_tactical',
+  'Falchion Knife':'knife_falchion','Bowie Knife':'knife_bowie','Butterfly Knife':'knife_butterfly',
+  'Shadow Daggers':'knife_push','Ursus Knife':'knife_ursus','Navaja Knife':'knife_widowmaker',
+  'Stiletto Knife':'knife_stiletto','Talon Knife':'knife_canis','Classic Knife':'knife_css',
+  'Paracord Knife':'knife_cord','Survival Knife':'knife_outdoor','Skeleton Knife':'knife_skeleton',
+  'Nomad Knife':'knife_outdoor','Kukri Knife':'knife_kukri',
+  'C4':'c4','手雷':'hegrenade','闪光':'flashbang','烟雾':'smokegrenade',
+  '燃烧瓶':'molotov','燃烧弹':'incgrenade','诱饵':'decoy','电击枪':'taser','刀':'knife',
+  'Smoke Grenade':'smokegrenade','Flashbang':'flashbang','Molotov':'molotov',
+  'Incendiary Grenade':'incgrenade','High Explosive Grenade':'hegrenade',
+  'Decoy Grenade':'decoy','C4 Explosive':'c4','Zeus x27':'taser'
+};
+/* 地图道具图标（canvas 用 Image 缓存） */
+const NG={};
+const NMAP={smoke:'smokegrenade',flash:'flashbang',molotov:'molotov',he:'hegrenade',decoy:'decoy'};
+['smokegrenade','flashbang','molotov','hegrenade','decoy','incgrenade','defuser'].forEach(n=>{
+  const im=new Image(); im.src='/icons/'+n+'.svg'; NG[n]=im;
+});
+
+function pick(a,t){let lo=0,hi=a.length-1;if(t<=a[0][0])return[0,0,0];if(t>=a[hi][0])return[hi,hi,0];
+  while(hi-lo>1){const m=(lo+hi)>>1;if(a[m][0]<=t)lo=m;else hi=m;}
+  const A=a[lo],B=a[hi],sp=B[0]-A[0]||1;return[lo,hi,(t-A[0])/sp];}
+const lerp=(a,b,r)=>a+(b-a)*r;
+function angLerp(a,b,r){let d=((b-a+540)%360)-180;return a+d*r;}
+const OFFSCREEN={x:-1e6,y:-1e6,yaw:0,hp:0,arm:0,hel:0,money:0,flash:0,w:'',alive:0,def:0};
+function at(p,t){
+  const s=p.s;
+  // 掉线 / 该回合没有采样（中途离开、加时后未入镜）时返回屏幕外，避免崩
+  if(!s||!s.length)return OFFSCREEN;
+  const[i,j,r]=pick(s,t);
+  if(i===j||r===0){const q=s[i];return{x:q[1],y:q[2],yaw:q[3],hp:q[4],arm:q[5],hel:q[6],
+    money:q[7],flash:q[8],w:q[9],alive:q[10],def:q[11]};}
+  const A=s[i],B=s[j];
+  return{x:lerp(A[1],B[1],r),y:lerp(A[2],B[2],r),yaw:angLerp(A[3],B[3],r),
+    hp:Math.round(lerp(A[4],B[4],r)),arm:Math.round(lerp(A[5],B[5],r)),hel:A[6],
+    money:A[7],flash:A[8],w:A[9],alive:r<0.5?A[10]:B[10],def:r<0.5?A[11]:B[11]};
+}
+function kdOf(p,t){let k=0,d=0,a=0;for(const x of R[cur].kills){if(x[0]>t)break;
+  if(x[1]===p.name)k++;if(x[2]===p.name)d++;if(x[5]===p.name)a++;}return[k,d,a];}
+/* 全场 KDA（含当前回合已发生的） */
+function kdTotal(p,t){
+  let k=0,d=0,a=0;
+  for(let i=0;i<=cur;i++){
+    for(const x of R[i].kills){
+      if(i===cur&&x[0]>t)continue;
+      if(x[1]===p.name)k++;if(x[2]===p.name)d++;if(x[5]===p.name)a++;
+    }
+  }
+  return[k,d,a];
+}
+function c4State(t){
+  const r=R[cur];let st={phase:'carry',who:r.c4||''};
+  for(const b of (r.bombs||[])){if(b.t>t)break;
+    if(b.type==='pickup')st={phase:'carry',who:b.who};
+    else if(b.type==='drop')st={phase:'ground',who:b.who,t:b.t};
+    else if(b.type==='plant')st={phase:'planted',t:b.t,x:b.x,y:b.y,site:b.site,who:b.who};
+    else if(b.type==='defuse')st={phase:'defused',t:b.t,who:b.who};
+    else if(b.type==='explode')st={phase:'exploded',t:b.t};}
+  return st;
+}
+const fmt=s=>Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');
+
+function updateTop(){
+  const r=R[cur];
+  let mine=0,op=0;
+  for(let i=0;i<cur;i++){ if(R[i].winner===R[i].a_side)mine++;else op++; }
+  if(r.winner){ if(r.winner===r.a_side)mine++;else op++; }
+  $('#sMine').textContent=mine; $('#sOp').textContent=op;
+  $('#rnum').textContent=r.r;
+  const mySide=r.players.find(p=>p.mine)?.side||r.a_side, opSide=mySide==='T'?'CT':'T';
+  const a=$('#sdMine'),b=$('#sdOp');
+  a.textContent=mySide;b.textContent=opSide;a.className='sd '+CL(mySide);b.className='sd '+CL(opSide);
+  $('#sMine').className='sc '+CL(mySide);$('#sOp').className='sc '+CL(opSide);
+  const tm=$('#tagMine'),to=$('#tagOp');
+  tm.textContent=mySide;to.textContent=opSide;tm.className='tag '+CL(mySide);to.className='tag '+CL(opSide);
+  const grad=(sd,rev)=>{const c=sd==='CT'?'91,143,212':'216,168,60';
+    return `linear-gradient(${rev?'270deg':'90deg'},rgba(${c},.28),rgba(${c},.03))`;};
+  $('#left .hdr').style.background=grad(mySide,false);
+  $('#right .hdr').style.background=grad(opSide,true);
+  const remain=Math.max(0,r.dur-now);
+  $('#clk').textContent=fmt(now<r.fz?r.fz-now:remain);
+  $('#clk').style.color=now<r.fz?'#707073':(remain<10?'#ff4d4d':'#eaebec');
+  const st=c4State(now),box=$('#c4box');box.className='c4';
+  if(st.phase==='planted'){box.textContent=`C4 ${fmt(Math.max(0,40-(now-st.t)))} @${st.site||''}`;box.classList.add('armed');}
+  else if(st.phase==='defused'){box.textContent='已拆除';box.classList.add('done');}
+  else if(st.phase==='exploded'){box.textContent='已爆炸';box.classList.add('done');}
+  else if(st.phase==='ground'){box.textContent='C4 掉落';box.classList.add('loose');}
+  else{box.textContent='C4 '+(st.who||'—');}
+}
+
+function buildRoster(){
+  const mk=(box,list,rrow)=>box.innerHTML=list.map(p=>`
+    <div class="pl ${CL(p.side)}${rrow?' rrow':''}" id="pl_${p.sid != null ? p.sid : CSS.escape(p.name)}">
+      <canvas class="plsmoke"></canvas>
+      <i class="stripe"></i>
+      <span class="hpfill" data-hpfill></span>
+      <div class="r1">
+        <span class="idx">${p.idx}</span><span class="nm">${p.name}</span>
+        <span class="sp"></span><span class="hpv" data-hpv>100</span>
+      </div>
+      <div class="r23">
+        <div class="r23L">
+          <span class="kd" data-kd>0/0/0</span>
+          <span class="r23b"><span class="money" data-money></span><span class="st" data-st></span></span>
+        </div>
+        <span class="wp" data-wpn></span>
+        <span class="armi" data-armi></span>
+      </div>
+    </div>`).join('');
+  const r=R[cur];
+  const _ct = r.players.filter(p=>p.side==='CT');
+  const _t  = r.players.filter(p=>p.side==='T');
+  const _mineN = r.players.filter(p=>p.mine).length;
+  // 正常情况按我方/敌方；is_me 失效（0 人或 10 人）时退回按阵营分，避免一边空一边挤 10 个
+  const useMine = _mineN > 0 && _mineN < r.players.length;
+  mk($('#rosterMine'), useMine ? r.players.filter(p=>p.mine) : _ct, false);
+  mk($('#rosterOp'),  useMine ? r.players.filter(p=>!p.mine) : _t, true);
+}
+function updateRoster(){
+  const r=R[cur],st=c4State(now);
+  for(const p of r.players){
+    const el=$('#pl_'+(p.sid != null ? p.sid : CSS.escape(p.name)));if(!el)continue;
+    // 已经掉线（当前回合晚于离开回合）就不再显示这条玩家卡
+    if(p.left && r.r > p.left){el.style.display='none';continue;}
+    if(vis[p.name]===false){el.style.display='none';continue;}
+    el.style.display='';
+    const s=at(p,now),kd=kdTotal(p,now);
+    el.classList.toggle('dead',!s.alive);
+    el.classList.toggle('flashed',!!s.alive&&(s.flash||0)>0.4);
+    const hpv=el.querySelector('[data-hpv]'), hpf=el.querySelector('[data-hpfill]');
+    const hpv2=s.alive?Math.max(0,s.hp):0;
+    hpv.textContent=hpv2;
+    hpf.style.width=hpv2+'%';
+    /* 烟雾跟着血条宽度走：血掉多少，烟就剩多少 */
+    const smk=el.querySelector('.plsmoke');
+    if(smk && smk.__hp!==hpv2){ smk.__hp=hpv2; smk.style.setProperty('--hp', hpv2+'%'); }
+    el.classList.toggle('warn',!!s.alive&&hpv2<=60&&hpv2>25);
+    el.classList.toggle('crit',!!s.alive&&hpv2<=25);
+    el.querySelector('[data-armi]').innerHTML=(s.alive&&s.arm>0)?wi(s.hel?'armor_helmet':'armor','armi'):'';
+    el.querySelector('[data-wpn]').innerHTML=s.alive?wIcon(s.w||''):'';
+    el.querySelector('[data-money]').textContent=s.alive?'$'+s.money:'';
+    el.querySelector('[data-kd]').textContent=kd[0]+'/'+kd[1]+'/'+kd[2];
+    const bd=[];
+    if(s.alive&&(s.flash||0)>0.15)bd.push(`<span class="bd flash">${s.flash.toFixed(1)}</span>`);
+    if(s.alive&&s.def)bd.push(wi('defuser','defi'));
+    if(st.phase==='carry'&&st.who===p.name)bd.push(wi('c4','c4i'));
+    if(st.phase==='defused'&&st.who===p.name&&now-st.t<4)bd.push('<span class="bd def">拆</span>');
+    el.querySelector('[data-st]').innerHTML=bd.join('');
+  }
+}
+
+/* ---- RWS：本回合 + 场均 ---- */
+function rwsRound(rd){
+  const r=R[rd],winMine=r.winner===r.a_side;
+  const winTeam=r.players.filter(p=>p.mine===winMine),d=r.dmg||{};
+  let tot=0;for(const p of winTeam)tot+=(d[p.name]||0);
+  const out={};
+  for(const p of winTeam)out[p.name]=tot>0?(d[p.name]||0)/tot*100:100/Math.max(1,winTeam.length);
+  return out;
+}
+function rwsStats(){
+  const cur1=rwsRound(cur);
+  const acc={};
+  for(const p of R[0].players)acc[p.name]=0;
+  for(let i=0;i<=cur;i++){
+    const s=rwsRound(i);
+    for(const nm in s)acc[nm]=(acc[nm]||0)+s[nm];
+  }
+  const n=cur+1;
+  return Object.keys(acc).map(nm=>[nm,cur1[nm]||0,acc[nm]/n])
+         .sort((a,b)=>b[1]-a[1]||b[2]-a[2]);
+}
+function drawRWS(){
+  const list=rwsStats(),max=Math.max(1,...list.map(x=>x[1]));
+  const r=R[cur];
+  $('#rwsBox').innerHTML=list.map(([nm,rv,av])=>{
+    const p=r.players.find(q=>q.name===nm);
+    const cls=(p&&p.isMe)?'rw me':'rw';
+    return `<div class="${cls}"><span class="n" style="color:${p?SC(p.side):'#909093'}">${nm}</span>
+      <span class="bar"><i style="width:${Math.max(0,rv/max*100).toFixed(0)}%"></i></span>
+      <span class="v">${rv.toFixed(0)}</span>
+      <span class="v2">${av.toFixed(1)}</span></div>`;
+  }).join('');
+}
+
+/* ---- 击杀日志（助攻在 → 之前） ---- */
+function drawKillLog(){
+  const r=R[cur];
+  const sideOf=n=>{const p=r.players.find(q=>q.name===n);return p?SC(p.side):'#9a9a9e';};
+  const allK=r.kills.filter(k=>k[0]<=now);
+  /* 按容器实际高度算能放几行：一行约 32px（13px 字 + 上下各 6px + 1px 描边）。
+     10 人全死 + C4 爆炸那种回合，宁可裁掉最旧的，也不让日志出现滚动条 */
+  const kfBox=$('#kfBox');
+  const maxRows=Math.max(3, Math.floor(((kfBox.clientHeight||320)-12)/32)-1);  /* -1 给爆炸行留位 */
+  const items=allK.slice().reverse().slice(0,maxRows);
+  $('#kfcount').textContent=allK.length?`${allK.length} 次`:'';
+  const rows=items.map(k=>{
+    const[t,att,vic,wpn,hs,asst,flags]=k;
+    const aTxt=asst?`<span class="plus">+</span>${wi('flashbang_assist','asti')}<span class="a" style="color:${sideOf(asst)}">${asst}</span>`:'';
+    const f=flags||0;
+    const fTxt=KF.filter(([bit])=>f&bit).map(([,icn,tip])=>
+      icn?wi(icn,'kfi'):`<span class="kft">${tip}</span>`).join('');
+    const isSui=att&&att===vic, isWorld=!att, isC4=String(wpn).toLowerCase()==='c4';
+    let attHtml;
+    if(isC4)attHtml=`<b style="color:#ff9a6a">C4</b>`;
+    else if(isSui)attHtml=`<b style="color:${sideOf(att)}">${att}</b>`;
+    else if(isWorld)attHtml=`<b style="color:#8b8b8f">世界</b>`;
+    else attHtml=`<b style="color:${sideOf(att)}">${att}</b>`;
+    const wName=WCN[wpn]||wpn;
+    /* 格式：击杀者 + 武器图标 + 标记 + 助攻 → 受害者 */
+    const mark = isC4 ? wi('c4','kfi')
+               : (isWorld ? wi(String(wpn).toLowerCase()==='world'?'worldent':'trigger_hurt','kfi') : '');
+    return `<div class="kl"><span class="t">${fmt(t)}</span><span class="body">
+      ${attHtml}${wIcon(wpn)}${mark}${hs?wi('icon_headshot','kfi'):''}${fTxt}${aTxt}
+      <span class="ar">→</span> <b style="color:${sideOf(vic)}">${vic}</b></span></div>`;
+  });
+  /* C4 爆炸：只播报爆炸本身。爆炸范围外的人不会死，不能推断"剩余 T 淘汰" */
+  const ex=(r.bombs||[]).find(b=>b.type==='explode');
+  if(ex&&now>=ex.t){
+    rows.unshift(`<div class="kl boom"><span class="t">${fmt(ex.t)}</span><span class="body">
+      ${wi('c4','c4i')}<b style="color:#ff9a6a">C4 爆炸</b></span></div>`);
+  }
+  $('#kfBox').innerHTML=rows.length?rows.join('')
+    :'<div class="kl">本回合暂无击杀</div>';
+}
+
+function buildRoundAxis(){
+  const CELL=34, MID=18, n=R.length;
+  // 换边点：常规赛 12/24；加时每 3 回合换一次（27、30、33…）
+  const SW=(()=>{const s=[];if(n>12)s.push(12);if(n>24)s.push(24);
+                 for(let r=27;r<n;r+=3)s.push(r);return s;})();
+  const gaps=i=>SW.filter(s=>i>=s).length;
+  const axis=$('#roundaxis'), top=$('#raTop'), line=$('#raLine'), bot=$('#raBot');
+  top.innerHTML='';line.innerHTML='';bot.innerHTML='';
+  axis.style.width=(n*CELL+SW.length*MID)+'px';
+  const xOf=i=>i*CELL+gaps(i)*MID+CELL/2;
+  const xLeft=i=>i*CELL+gaps(i)*MID;
+  R.forEach((r,i)=>{
+    const cx=xOf(i);
+    const aWin=r.winner===r.a_side;
+    const mySideR=r.players.find(p=>p.mine)?.side||r.a_side;
+    const winSide=aWin?mySideR:(mySideR==='CT'?'T':'CT');
+    const ic=`<div class="ra-ic ${aWin?'up':'dn'} ${CL(winSide)}c${aWin?' mine':''}"
+        style="left:${cx}px" data-i="${i}"
+        title="R${r.r} · ${aWin?'我方胜':'敌方胜'} · ${r.reason||''}">${r.reason==='bomb_defused'?wi('defuser'):reasonIcon(r.reason)}</div>`;
+    const dot=`<div class="ra-loss ${aWin?'dn':'up'}" style="left:${cx}px"></div>`;
+    if(aWin){top.innerHTML+=ic;bot.innerHTML+=dot;}
+    else{bot.innerHTML+=ic;top.innerHTML+=dot;}
+    if(r.r%5===0||i===n-1){
+      line.innerHTML+=`<div class="ra-tickline" style="left:${cx}px"></div>
+                       <div class="ra-tick" style="left:${cx}px">${r.r}</div>`;
+    }
+    if(SW.includes(i))line.innerHTML+=`<div class="ra-half" style="left:${xLeft(i)}px"><span>${i===12?'换边':'加时'}</span></div>`;
+  });
+  line.innerHTML+=`<div class="ra-cur" style="left:${xLeft(cur)}px;width:${CELL}px"></div>`;
+  document.querySelectorAll('#roundaxis .ra-ic').forEach(el=>{
+    el.onclick=()=>{cur=+el.dataset.i;now=R[cur].fz;stop();sync();};
+  });
+}
+
+/* ---- 时间轴：三角标记 + 大刻度 ---- */
+function buildMarks(){
+  const r=R[cur],top=$('#tlTop'),bot=$('#tlBot'),ticks=$('#tlticks');
+  top.querySelectorAll('.tlt').forEach(e=>e.remove());
+  bot.querySelectorAll('.tlt').forEach(e=>e.remove());
+  ticks.innerHTML='';
+  const W=r.dur||1;
+  const mineOf=n=>{const p=r.players.find(q=>q.name===n);return p?!!p.mine:false;};
+  const add=(where,t,color,title)=>{
+    if(t<0||t>r.dur)return;
+    const row=where==='mine'?top:bot;
+    const el=document.createElement('div');
+    el.className='tlt';
+    el.style.left=`calc(${t/W*100}% - 5px)`;
+    el.style.color=color;el.title=title;
+    row.appendChild(el);
+  };
+  const step=r.dur>120?30:(r.dur>60?15:5);
+  for(let t=0;t<=r.dur;t+=step){
+    const tk=document.createElement('div');tk.className='tk';
+    tk.style.left=(t/W*100)+'%';ticks.appendChild(tk);
+    const tx=document.createElement('div');tx.className='tx';
+    tx.style.left=(t/W*100)+'%';tx.textContent=t;ticks.appendChild(tx);
+  }
+  add('mine',r.fz,'#7bd44b','开打');add('op',r.fz,'#7bd44b','开打');
+  for(const k of r.kills)add(mineOf(k[2])?'mine':'op',k[0],'#ff4d4d',`${k[1]} → ${k[2]} (${k[3]})`);
+  for(const b of (r.bombs||[])){
+    if(b.type==='plant')add(mineOf(b.who)?'mine':'op',b.t,'#ff8a5c','下包 '+b.site);
+    else if(b.type==='defuse')add(mineOf(b.who)?'mine':'op',b.t,'#7bd44b','拆包');
+    else if(b.type==='explode'){add('mine',b.t,'#ffcf3a','爆炸');add('op',b.t,'#ffcf3a','爆炸');}
+  }
+  for(const g of r.grenades)add(mineOf(g[1])?'mine':'op',g[2],g[6]==='T'?'#d8a83c':'#5b8fd4','道具 '+g[0]);
+}
+
+function drawPlayer(p,s,color,idx){
+  const isMine=p.mine,{x,y}=s;
+  if(!s.alive){
+    ctx.strokeStyle=color;ctx.lineWidth=2.2;ctx.globalAlpha=.85;
+    ctx.beginPath();ctx.moveTo(x-4.5,y-4.5);ctx.lineTo(x+4.5,y+4.5);
+    ctx.moveTo(x+4.5,y-4.5);ctx.lineTo(x-4.5,y+4.5);ctx.stroke();ctx.globalAlpha=1;return;
+  }
+  const flashed=(s.flash||0)>0.4;
+  if(opt.face&&!flashed){
+    const a=s.yaw*Math.PI/180,sp=20*Math.PI/180,L=54;
+    ctx.globalAlpha=.22;ctx.fillStyle=color;
+    ctx.beginPath();ctx.moveTo(x,y);
+    ctx.lineTo(x+L*Math.cos(a-sp),y-L*Math.sin(a-sp));
+    ctx.lineTo(x+L*Math.cos(a+sp),y-L*Math.sin(a+sp));
+    ctx.closePath();ctx.fill();ctx.globalAlpha=1;
+  }
+  if(flashed){ctx.globalAlpha=.5;ctx.fillStyle='#fff';
+    ctx.beginPath();ctx.arc(x,y,12,0,7);ctx.fill();ctx.globalAlpha=1;}
+  ctx.beginPath();ctx.arc(x,y,7,0,7);ctx.fillStyle=flashed?'#fff':color;ctx.fill();
+  ctx.lineWidth=isMine?2.3:1.2;ctx.strokeStyle=isMine?'#fff':'#050505';ctx.stroke();
+  ctx.fillStyle=flashed?'#111':'#050505';ctx.font='700 9px system-ui';ctx.textAlign='center';
+  ctx.fillText(idx,x,y+3.2);ctx.textAlign='left';
+  ctx.fillStyle='rgba(0,0,0,.62)';ctx.fillRect(x-11,y-15,22,2.4);
+  ctx.fillStyle=s.hp>60?'#7bd44b':(s.hp>25?'#ffcf3a':'#ff5f5f');
+  ctx.fillRect(x-11,y-15,22*Math.max(0,s.hp)/100,2.4);
+  if(s.arm>0){ctx.fillStyle='#8fbfe6';ctx.fillRect(x-11,y-11.5,22*Math.min(100,s.arm)/100,1.5);}
+  /* 带拆弹钳：地图上给个小钳子标 */
+  if(s.def&&p.side==='CT'){
+    const im=NG['defuser'];
+    if(im&&im.complete&&im.naturalWidth>0){
+      const iw=im.naturalWidth,ih=im.naturalHeight,k=12/Math.max(iw,ih);
+      ctx.globalAlpha=.95;
+      ctx.drawImage(im,x+7,y-25,iw*k,ih*k);
+      ctx.globalAlpha=1;
+    }
+  }
+}
+function drawNade(kind,x,y,left,side,airborne){
+  const tcol=side==='T'?'#d8a83c':'#5b8fd4';
+  ctx.save();ctx.translate(x,y);
+  /* 1) 作用范围 —— 只有爆开后才有 */
+  if(!airborne){
+    if(kind==='smoke'){
+      const r=150/5.22;
+      ctx.globalAlpha=.30;ctx.fillStyle=side==='T'?'#c9c2b0':'#a8a8ac';
+      ctx.beginPath();ctx.arc(0,0,r,0,7);ctx.fill();
+      ctx.globalAlpha=.8;ctx.strokeStyle=side==='T'?'#e8dcc0':'#b8b8bb';ctx.lineWidth=1.3;
+      ctx.setLineDash([5,4]);ctx.stroke();ctx.setLineDash([]);
+    }else if(kind==='molotov'){
+      const r=190/5.22;
+      ctx.globalAlpha=.30;ctx.fillStyle='#ff5d1f';
+      for(let i=0;i<9;i++){const a=i*0.72+left*0.6;
+        ctx.beginPath();ctx.arc(Math.cos(a)*r*0.42,Math.sin(a)*r*0.42,r*0.58,0,7);ctx.fill();}
+      ctx.globalAlpha=.8;ctx.strokeStyle=tcol;ctx.lineWidth=1.2;
+      ctx.beginPath();ctx.arc(0,0,r,0,7);ctx.stroke();
+    }else if(kind==='he'){
+      ctx.globalAlpha=Math.max(0,left/0.6)*.85;ctx.strokeStyle='#ff9a3c';ctx.lineWidth=2.4;
+      ctx.beginPath();ctx.arc(0,0,10+(0.6-left)*80,0,7);ctx.stroke();
+    }else if(kind==='flash'){
+      ctx.globalAlpha=Math.max(0,left/0.5)*.45;ctx.fillStyle='#fff8c0';
+      ctx.beginPath();ctx.arc(0,0,17,0,7);ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  }
+  /* 2) 图标（按原始宽高比缩放，不拉伸） */
+  const im=NG[NMAP[kind]];
+  if(im&&im.complete&&im.naturalWidth>0){
+    const iw=im.naturalWidth, ih=im.naturalHeight, k=22/Math.max(iw,ih);
+    ctx.globalAlpha=.95;
+    ctx.drawImage(im,-iw*k/2,-ih*k/2,iw*k,ih*k);
+    ctx.globalAlpha=1;
+  }else{
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(0,0,6,0,7);ctx.fill();
+  }
+  /* 3) 剩余秒数 —— 同样只在生效后 */
+  if(!airborne&&left>0&&left<99){
+    ctx.font='700 10px system-ui';ctx.textAlign='center';
+    ctx.fillStyle='rgba(0,0,0,.78)';ctx.fillRect(-9,12,18,12);
+    ctx.fillStyle='#fff';ctx.fillText(Math.ceil(left),0,21);
+    ctx.textAlign='left';
+  }
+  ctx.restore();ctx.globalAlpha=1;
+}
+function drawC4(x,y,st){
+  const blink=Math.max(.35,.5+.5*Math.sin(now*8));
+  ctx.globalAlpha=blink;ctx.fillStyle='#ff4b1f';ctx.fillRect(x-5,y-3.5,10,7);
+  ctx.globalAlpha=1;ctx.strokeStyle='#ffb08a';ctx.lineWidth=1.3;ctx.strokeRect(x-7,y-5.5,14,11);
+  if(st.phase==='planted'){
+    ctx.fillStyle='#ff8a5c';ctx.font='700 13px system-ui';
+    ctx.fillText(fmt(Math.max(0,40-(now-st.t))),x+10,y-7);
+  }
+}
+function draw(){
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0,0,1024,1024);
+  ctx.fillStyle = window.__mapBg || '#0a0a0b';
+  ctx.fillRect(0,0,1024,1024);
+  /* 地图缩放/平移 */
+  ctx.setTransform(view.s,0,0,view.s,view.x,view.y);
+  if(bg.complete)ctx.drawImage(bg,0,0,1024,1024);
+  const r=R[cur];
+  if(opt.util){
+    for(const g of r.grenades){
+      const[kind,who,ts,te,gx,gy,gside]=g,fly=0.75;
+      if(now<ts-fly||now>te)continue;
+      if(now<ts){
+        const p=r.players.find(q=>q.name===who);if(!p)continue;
+        const s=at(p,ts-0.2),rr=(now-(ts-fly))/fly;
+        const x=lerp(s.x,gx,rr),y=lerp(s.y,gy,rr)-Math.sin(rr*Math.PI)*24;
+        ctx.globalAlpha=.4;ctx.strokeStyle=gside==='T'?'#d8a83c':'#5b8fd4';ctx.lineWidth=1;
+        ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(s.x,s.y);ctx.lineTo(x,y);ctx.stroke();
+        ctx.setLineDash([]);ctx.globalAlpha=1;
+        drawNade(kind,x,y,0.1,gside,true);
+      }else drawNade(kind,gx,gy,te-now,gside);
+    }
+  }
+  const st=c4State(now);
+  if(st.phase==='planted')drawC4(st.x,st.y,st);
+  if(opt.shot){
+    for(const s of r.shots){
+      if(s[0]>now||now-s[0]>0.15)continue;
+      const[,x,y,yaw]=s,a=yaw*Math.PI/180,L=86+Math.random()*24;
+      ctx.globalAlpha=.45;ctx.strokeStyle='#ffe9a8';ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+L*Math.cos(a),y-L*Math.sin(a));ctx.stroke();
+      ctx.globalAlpha=.75;ctx.fillStyle='#fff';
+      ctx.beginPath();ctx.arc(x+8*Math.cos(a),y-8*Math.sin(a),2,0,7);ctx.fill();ctx.globalAlpha=1;
+    }
+  }
+  if(opt.trail){
+    const win=Math.max(2.5,r.dur*0.22);
+    for(const p of r.players){
+      if(vis[p.name]===false)continue;
+      const pts=p.s.filter(q=>q[0]<=now&&now-q[0]<=win);
+      if(pts.length<2)continue;
+      for(let i=1;i<pts.length;i++){
+        ctx.globalAlpha=Math.max(.22,1-(now-pts[i][0])/win)*.95;
+        ctx.strokeStyle=p.pcolor;ctx.lineWidth=2.2;ctx.lineCap='round';
+        ctx.beginPath();ctx.moveTo(pts[i-1][1],pts[i-1][2]);ctx.lineTo(pts[i][1],pts[i][2]);ctx.stroke();
+      }
+      ctx.globalAlpha=1;
+    }
+  }
+  for(const p of r.players){
+    if(vis[p.name]===false)continue;
+    drawPlayer(p,at(p,now),SC(p.side),p.idx);
+  }
+  if(st.phase==='carry'&&st.who){
+    const p=r.players.find(q=>q.name===st.who);
+    if(p){const s=at(p,now);if(s.alive)drawC4(s.x+9,s.y+9,st);}
+  }else if(st.phase==='ground'){
+    const p=r.players.find(q=>q.name===st.who);
+    if(p){const s=at(p,now);drawC4(s.x,s.y,st);
+      ctx.globalAlpha=.5;ctx.strokeStyle='#ffcf3a';ctx.lineWidth=1.4;
+      ctx.beginPath();ctx.arc(s.x,s.y,14+2*Math.sin(now*6),0,7);ctx.stroke();ctx.globalAlpha=1;}
+  }
+  /* C4 爆炸：全图红色闪光（1.4 秒衰减） */
+  const ex=(r.bombs||[]).find(b=>b.type==='explode');
+  if(ex&&now>=ex.t&&now<ex.t+1.4){
+    const k=1-(now-ex.t)/1.4;
+    const g=ctx.createRadialGradient(512,512,0,512,512,780);
+    g.addColorStop(0,`rgba(255,140,60,${(k*0.66).toFixed(3)})`);
+    g.addColorStop(0.55,`rgba(255,70,25,${(k*0.46).toFixed(3)})`);
+    g.addColorStop(1,`rgba(150,15,0,${(k*0.20).toFixed(3)})`);
+    ctx.fillStyle=g;ctx.fillRect(0,0,1024,1024);
+    ctx.globalAlpha=1;
+  }
+  updateTop();updateRoster();drawRWS();drawKillLog();
+  $('#time').value=now;
+  $('#clock').textContent=now.toFixed(1)+' / '+r.dur.toFixed(1)+'s';
+  /* 面板只在回合变化时重建（播放中每帧重建会让点击落空） */
+  if($('#tabpanel').classList.contains('on')&&builtCur!==cur)buildTab();
+  ctx.setTransform(1,0,0,1,0,0);
+  const zl=$('#zoomLbl');
+  if(zl){zl.textContent=view.s>1.01?view.s.toFixed(1)+'×':'';
+       zl.style.opacity=view.s>1.01?1:0;}
+}
+
+let tabTab='stats',builtCur=-1;
+function utilStats(){
+  const acc={};
+  for(let i=0;i<R.length;i++){          /* 全场，不随当前回合变 */
+    const u=(R[i]&&R[i].util)||{};
+    for(const nm in u){
+      const a=acc[nm]||(acc[nm]={smoke:0,molotov:0,flash:0,he:0,decoy:0,sec:0,dmg:0,
+                                 he_dmg:0,fire_dmg:0,flash_sec:0});
+      for(const k in u[nm])a[k]=(a[k]||0)+u[nm][k];
+    }
+  }
+  return acc;
+}
+function buildTab(){
+  const r=R[cur];
+  builtCur=cur;
+  if(!perfWho){const me0=r.players.find(p=>p.isMe);perfWho=(me0||r.players[0]||{}).name||'';}
+  const fullKD=p=>{
+    let k=0,d=0,a=0;
+    R.forEach(rd=>(rd.kills||[]).forEach(x=>{
+      if(x[1]===p.name)k++;if(x[2]===p.name)d++;if(x[5]===p.name)a++;
+    }));
+    return [k,d,a];
+  };
+  const adrTo=p=>{
+    let tot=0;
+    for(let i=0;i<=cur;i++)tot+=((R[i].dmg||{})[p.name]||0);
+    return Math.round(tot/(cur+1));
+  };
+  const row=p=>{
+    const s=at(p,now),kd=kdTotal(p,9999),fk3=fullKD(p);
+    const hl=p.name===perfWho?' sel':(p.isMe?' me':'');
+    return `<tr class="${hl.trim()}" style="${p.mine?`border-left:2px solid ${SC(p.side)}66`:''}">
+      <td><span style="color:${SC(p.side)};font-weight:800">${p.idx}</span> ${p.name}</td>
+      <td class="num">${fk3[0]}</td><td class="num">${fk3[1]}</td>
+      <td class="num">${fk3[2]}</td><td class="num">${p.hs||0}%</td>
+      <td class="num">${p.adr==null?'—':Number(p.adr).toFixed(1)}</td>
+      <td class="num">${p.kast==null?'—':Number(p.kast).toFixed(1)}</td>
+      <td class="num" style="font-weight:700;color:#7bd44b">${p.rating==null?'—':Number(p.rating).toFixed(2)}</td>
+      <td class="num">${p.fk??0}</td><td class="num">${p.mk??0}</td>
+      <td class="num sect">${kd[0]}</td><td class="num">${kd[1]}</td>
+      <td class="num">${kd[2]}</td><td class="num">${adrTo(p)}</td></tr>`;
+  };
+  const U=utilStats();
+  const curUtil=(R[cur]&&R[cur].util)||{};
+  const urow=p=>{
+    const hl=p.name===perfWho?' sel':(p.isMe?' me':'');
+    const u=U[p.name]||{smoke:0,molotov:0,flash:0,he:0,decoy:0,sec:0,dmg:0,he_dmg:0,fire_dmg:0,flash_sec:0};
+    const ru=curUtil[p.name]||{dmg:0,he_dmg:0,fire_dmg:0,flash_sec:0,flash:0};
+    const d0='<span style="color:#414144">·</span>';
+    const z=v=>v?`<span style="color:#dfe0e2">${v}</span>`:d0;
+    // 闪光助攻数（全场 / 本回合）
+    let fa=0;
+    R.forEach(rd=>(rd.kills||[]).forEach(k=>{if(k[5]===p.name)fa++;}));
+    const faCur=(r.kills||[]).filter(k=>k[5]===p.name).length;
+    return `<tr class="${hl.trim()}" style="${p.mine?`border-left:2px solid ${SC(p.side)}66`:''}">
+      <td><span style="color:${SC(p.side)};font-weight:800">${p.idx}</span> ${p.name}</td>
+      <td class="num">${z(u.smoke)}</td>
+      <td class="num">${z(u.molotov)}</td>
+      <td class="num" style="color:#ff6a2b">${u.fire_dmg||d0}</td>
+      <td class="num">${z(u.he)}</td>
+      <td class="num" style="color:#ff9a3c">${u.he_dmg||d0}</td>
+      <td class="num">${z(u.flash)}</td>
+      <td class="num" style="color:#c8a0ff">${fa||d0}</td>
+      <td class="num">${z(u.decoy)}</td>
+      <td class="num" style="font-weight:700;color:#9fe07a">${u.flash_sec?u.flash_sec.toFixed(1)+'s':d0}</td>
+      <td class="num sect">${ru.fire_dmg||d0}</td>
+      <td class="num">${ru.he_dmg||d0}</td>
+      <td class="num" style="color:#c8a0ff">${faCur||d0}</td>
+      <td class="num">${ru.flash_sec?ru.flash_sec.toFixed(1)+'s':d0}</td></tr>`;
+  };
+  const _mn=r.players.filter(p=>p.mine).length;
+  const _useMine=_mn>0&&_mn<r.players.length;
+  const mine=_useMine?r.players.filter(p=>p.mine):r.players.filter(p=>p.side==='CT');
+  const opp =_useMine?r.players.filter(p=>!p.mine):r.players.filter(p=>p.side==='T');
+  $('#tabbody').innerHTML=`<div class="tabhead">
+      <div class="tabs">
+        <button class="tt${tabTab==='stats'?' on':''}" data-t="stats">总数据</button>
+        <button class="tt${tabTab==='util'?' on':''}" data-t="util">道具数据</button>
+        <button class="tt${tabTab==='chart'?' on':''}" data-t="chart">回合走势</button>
+      </div>
+      <span class="thint">全场 ${R.length} 回合 · 正在看 R${r.r}</span>
+    </div>
+    <div id="tabPane"></div>
+    <div id="perfAxis">
+      <div class="paHead">
+        <span class="paTitle">回合表现</span>
+        <select id="perfWho" class="csel"></select>
+        <span class="paHint">上方=击杀 · 下方=死亡 · 点格切回合</span>
+      </div>
+      <div class="paScroll"><div class="paInner">
+        <div class="paTop"></div>
+        <div class="paLine"></div>
+        <div class="paBot"></div>
+      </div></div>
+    </div>`;
+  const pane=$('#tabPane');
+  if(tabTab==='stats'){
+    pane.innerHTML=`<table class="utab"><thead>
+    <tr class="grp">
+      <th></th>
+      <th colspan="9" class="gTotal">全场总数据</th>
+      <th colspan="4" class="gCur">累计至 R${r.r}</th>
+    </tr>
+    <tr>
+    <th>选手</th><th class="num">K</th><th class="num">D</th><th class="num">A</th>
+    <th class="num">爆%</th><th class="num">ADR</th><th class="num">KAST</th>
+    <th class="num">Rating</th><th class="num">首杀</th><th class="num">多杀</th>
+    <th class="num sect">K</th><th class="num">D</th><th class="num">A</th>
+    <th class="num">ADR</th></tr></thead>
+    <tbody>
+      <tr class="tm" style="background:${SC(mine[0]?.side)}22"><td colspan="14" style="color:${SC(mine[0]?.side)};font-weight:700">我方 · ${mine[0]?.side||''}</td></tr>
+      ${mine.map(row).join('')}
+      <tr class="tm" style="background:${SC(opp[0]?.side)}1f"><td colspan="14" style="color:${SC(opp[0]?.side)}">敌方 · ${opp[0]?.side||''}</td></tr>
+      ${opp.map(row).join('')}
+    </tbody></table>`;
+  }else if(tabTab==='util'){
+    pane.innerHTML=`<table class="utab"><thead>
+    <tr class="grp">
+      <th></th>
+      <th colspan="9" class="gTotal">全场总数据</th>
+      <th colspan="4" class="gCur">R${r.r} 本回合</th>
+    </tr>
+    <tr>
+    <th>选手</th>
+    <th class="num">烟</th><th class="num">火</th><th class="num">火伤</th>
+    <th class="num">雷</th><th class="num">雷伤</th>
+    <th class="num">闪</th><th class="num">闪白</th><th class="num">诱饵</th>
+    <th class="num">被闪</th>
+    <th class="num sect">火伤</th><th class="num">雷伤</th>
+    <th class="num">闪白</th><th class="num">被闪</th></tr></thead>
+    <tbody>
+      <tr class="tm" style="background:${SC(mine[0]?.side)}22"><td colspan="14" style="color:${SC(mine[0]?.side)};font-weight:700">我方 · ${mine[0]?.side||''}</td></tr>
+      ${mine.map(urow).join('')}
+      <tr class="tm" style="background:${SC(opp[0]?.side)}1f"><td colspan="14" style="color:${SC(opp[0]?.side)}">敌方 · ${opp[0]?.side||''}</td></tr>
+      ${opp.map(urow).join('')}
+    </tbody></table>`;
+  }else{
+    buildChart();
+  }
+  buildPerfAxis();
+  document.querySelectorAll('#tabbody .tt').forEach(b=>{
+    b.onclick=()=>{tabTab=b.dataset.t;buildTab();};
+  });
+}
+/* ---- 回合表现轴：横轴 = 回合数，上=我方击杀，下=我方死亡 ---- */
+let perfWho=null;
+function buildPerfAxis(){
+  const inner=$('.paInner'),top=$('.paTop'),line=$('.paLine'),bot=$('.paBot');
+  if(!inner||!top||!line||!bot)return;
+  const n=R.length, CELL=40;
+  inner.style.width=(n*CELL)+'px';
+  top.innerHTML='';line.innerHTML='';bot.innerHTML='';
+  // 选中玩家（默认自己）
+  const allP=R[cur]?.players||[];
+  const me=allP.find(p=>p.isMe);
+  if(!perfWho)perfWho=(me||allP[0]||{}).name||'';
+  const selWho=perfWho;
+  const selEl=$('#perfWho');
+  if(selEl&&!selEl.dataset.built){
+    selEl.dataset.built='1';
+    selEl.innerHTML=allP.map(p=>`<option value="${p.name}">${p.name}${p.isMe?' (你)':''}</option>`).join('');
+    selEl.value=selWho;
+    selEl.onchange=()=>{perfWho=selEl.value;buildTab();};
+  }else if(selEl&&selEl.value!==selWho){
+    selEl.value=selWho;
+  }
+  let lastSide=null,swapIdx=-1;
+  R.forEach((r,i)=>{
+    const left=i*CELL;
+    const mySide=(r.players.find(p=>p.mine)||{}).side;
+    if(lastSide&&mySide&&mySide!==lastSide&&swapIdx<0)swapIdx=i;
+    lastSide=mySide||lastSide;
+    // 击杀（只统计选中玩家）
+    const mk=r.kills.filter(k=>k[1]===selWho);
+    mk.forEach((k,j)=>{
+      const hs=k[4];
+      top.innerHTML+=`<span class="paIc ${hs?'hs':'up'}" style="left:${left+CELL/2}px;bottom:${1+j*15}px"
+        title="R${r.r} ${fmt(k[0])}｜${k[1]} ${k[3]}${hs?' 爆头':''} → ${k[2]}">${wi('icon-death','paI')}</span>`;
+    });
+    // 死亡（只统计选中玩家）
+    const md=r.kills.filter(k=>k[2]===selWho);
+    md.forEach((k,j)=>{
+      bot.innerHTML+=`<span class="paIc dn" style="left:${left+CELL/2}px;top:${1+j*15}px"
+        title="R${r.r} ${fmt(k[0])}｜${k[1]||'世界'} ${k[3]} → ${k[2]}">${wi('icon-death','paI')}</span>`;
+    });
+    // 胜利 = 绿色条（不区分阵营/方式）
+    const won=r.winner===mySide;
+    line.innerHTML+=`<span class="paNum${i===cur?' on':''}" style="left:${left+CELL/2}px"
+        data-i="${i}">${r.r}</span>
+      <span class="paTick" style="left:${left}px"></span>
+      ${won?`<span class="paWin" style="left:${left+2}px;width:${CELL-4}px"></span>`:''}
+      <span class="paCell" style="left:${left}px;width:${CELL}px" data-i="${i}" title="点击切到 R${r.r}"></span>`;
+  });
+  // 换边分界（swapIdx 在循环里算好了）
+  if(swapIdx>0){
+    const d=document.createElement('span');
+    d.className='paHalf';d.style.left=(swapIdx*CELL)+'px';
+    line.appendChild(d);
+    top.appendChild(d.cloneNode());
+    bot.appendChild(d.cloneNode());
+  }
+  // 整格可点
+  line.querySelectorAll('.paCell').forEach(el=>{
+    el.onclick=()=>{cur=+el.dataset.i;now=R[cur].fz;stop();sync();};
+  });
+  // 当前回合滚到可视区
+  const sc=$('.paScroll');
+  if(sc){
+    const tgt=cur*CELL, max=sc.clientWidth;
+    if(tgt<sc.scrollLeft||tgt+CELL>sc.scrollLeft+max)
+      sc.scrollLeft=Math.max(0,tgt-CELL*2);
+  }
+}
+/* ---- 回合走势：单玩家 · 单回合值(柱) vs 累计值(线) ---- */
+let chartMode='hs', chartPlayer=null;
+function playerSeries(name,m){
+  const out=[]; let ck=0,chs=0,cd=0,cu=0,cf=0,crws=0,cw=0;
+  R.forEach((r,i)=>{
+    let k=0,hs=0;
+    for(const x of r.kills){ if(x[1]===name){k++; if(x[4])hs++;} }
+    const dmg=(r.dmg||{})[name]||0;
+    const u=(r.util||{})[name]||{};
+    const un=(u.smoke||0)+(u.molotov||0)+(u.flash||0)+(u.he||0)+(u.decoy||0);
+    ck+=k; chs+=hs; cd+=dmg; cu+=un; cf+=(u.flash_sec||0);
+    let nowV=null, cumV=0;
+    if(m==='hs'){ nowV=k?hs/k*100:null; cumV=ck?chs/ck*100:0; }
+    else if(m==='dmg'){ nowV=dmg; cumV=cd/(i+1); }
+    else if(m==='kill'){ nowV=k; cumV=ck/(i+1); }
+    else if(m==='util'){ nowV=un; cumV=cu/(i+1); }
+    else if(m==='flash'){ nowV=(u.flash_sec||0); cumV=cf/(i+1); }
+    else if(m==='rws'){
+      const rw=rwsRound(i);
+      const has=Object.prototype.hasOwnProperty.call(rw,name);
+      nowV=has?rw[name]:0;          /* 败方 RWS = 0 */
+      crws+=has?rw[name]:0;
+      cumV=crws/(i+1);              /* 场均（含败方 0） */
+      if(has)cw++;
+    }
+    out.push([nowV,cumV,{k,hs}]);
+  });
+  return out;
+}
+const fmtV=(v,m)=>v===null||v===undefined?'—':(m==='hs'?v.toFixed(0)+'%':(m==='flash'?v.toFixed(1)+'s':v.toFixed(1)));
+const METRIC_NAME={hs:'爆头率',dmg:'每回合伤害',kill:'每回合击杀',flash:'被闪时长',rws:'RWS'};
+function buildChart(){
+  const pane=$('#tabPane');
+  if(!pane)return;
+  const allP=R[cur].players;
+  if(!perfWho){const me=allP.find(p=>p.isMe);perfWho=(me||allP[0]).name;}
+  const name=perfWho;
+  pane.innerHTML=`<div class="chartbar">
+      <span class="clab">${name}</span>
+      <button class="cbtn${chartMode==='hs'?' on':''}" data-m="hs">爆头率</button>
+      <button class="cbtn${chartMode==='dmg'?' on':''}" data-m="dmg">伤害</button>
+      <button class="cbtn${chartMode==='rws'?' on':''}" data-m="rws">RWS</button>
+      <button class="cbtn${chartMode==='econ'?' on':''}" data-m="econ">经济</button>
+      <button class="cbtn${chartMode==='flash'?' on':''}" data-m="flash">被闪</button>
+      <span class="cleg"><b class="lm"></b>柱=单回合 <b class="lc"></b>线=累计 <b class="lw"></b>胜 <b class="ll"></b>负</span>
+    </div>
+    <div id="rwsDetail" class="rwsdet"></div>
+    <div id="chart"></div>`;
+  const box=$('#chart');
+  pane.querySelectorAll('.cbtn').forEach(b=>{
+    b.onclick=()=>{chartMode=b.dataset.m;buildChart();};
+  });
+  /* 经济模式走独立渲染（双向对峙柱） */
+  if(chartMode==='econ'){ drawEconChart(); return; }
+  /* RWS 模式：本回合全员的 RWS */
+  const det=$('#rwsDetail');
+  if(det){
+    if(chartMode==='rws'){
+      const r=R[cur],rw=rwsRound(cur);
+      const list=r.players.map(p=>{
+        const has=Object.prototype.hasOwnProperty.call(rw,p.name);
+        return {p,v:has?rw[p.name]:0,has};
+      }).sort((a,b)=>b.v-a.v);
+      det.style.display='flex';
+      det.innerHTML=`<span class="rdLab">R${r.r} 全员 RWS</span>`+list.map(({p,v,has})=>
+        `<span class="rdIt${p.isMe?' me':''}" style="--c:${SC(p.side)}">
+          <b>${p.idx}</b>${p.name}<i>${has?v.toFixed(0):'—'}</i></span>`).join('');
+    }else{
+      det.style.display='none';
+    }
+  }
+  const series=playerSeries(name,chartMode);
+  const scale=Math.max(1,...series.map(v=>Math.max(v[0]||0,v[1]||0)));
+  /* 固定画布宽度：回合数变化时不再让整块图忽宽忽窄 */
+  const n=R.length, PAD=54, H=380, W=1180;
+  const CELL=(W-PAD)/n;
+  const cw=CELL, bw=Math.max(2,CELL*0.58);
+  const X=i=>PAD+(i+0.5)*cw;
+  const pts=series.map((v,i)=>`${X(i)},${H-(v[1]/scale)*H*0.9}`).join(' ');
+  let g='';
+  // y 轴网格（从 PAD 起，不压柱子）
+  for(let s=0;s<=4;s++){
+    const y=H-(H*s/4)*0.9;
+    g+=`<line x1="${PAD}" y1="${y}" x2="${W}" y2="${y}" stroke="#212226" stroke-width="1"/>`;
+    g+=`<text x="${PAD-8}" y="${y+3.5}" fill="#5c5c60" font-size="10" text-anchor="end">${fmtV(scale*s/4,chartMode)}</text>`;
+  }
+  // 当前回合高亮
+  g+=`<rect x="${PAD+cur*cw+1}" y="0" width="${cw-2}" height="${H}" fill="rgba(255,255,255,.055)"/>`;
+  series.forEach((v,i)=>{
+    const r=R[i];
+    const cx=X(i);
+    const x=cx-bw/2;
+    /* 柱色跟当前回合我方阵营走：CT 蓝 / T 橙，换边自动变 */
+    const myCol=SC(r.a_side);
+    if(chartMode==='dmg'){
+      const u=(r.util||{})[name]||{};
+      const ud=u.dmg||0, total=v[0]||0, gd=Math.max(0,total-ud);
+      const hg=(gd/scale)*H*0.9, hu=(ud/scale)*H*0.9;
+      g+=`<rect x="${x}" y="${H-hg}" width="${bw}" height="${Math.max(0.5,hg)}" fill="${myCol}" rx="0"/>`;
+      if(ud>0)g+=`<rect x="${x}" y="${H-hg-hu}" width="${bw}" height="${Math.max(0.5,hu)}" fill="${myCol}" opacity=".48" rx="0"/>`;
+    }else{
+      const h=v[0]===null?0:(v[0]/scale)*H*0.9;
+      g+=`<rect x="${x}" y="${H-h}" width="${bw}" height="${Math.max(0.5,h)}" fill="${myCol}" rx="0"/>`;
+      if(v[0])g+=`<text x="${cx}" y="${H-h-5}" fill="#9a9a9f" font-size="9"
+        text-anchor="middle">${fmtV(v[0],chartMode)}</text>`;
+    }
+    const aWin=r.winner===r.a_side;
+    g+=`<rect x="${PAD+i*cw+2}" y="${H+3}" width="${cw-4}" height="3"
+        fill="${aWin?myCol:'rgba(255,255,255,.10)'}" opacity="${aWin?'.85':'1'}"/>`;
+    g+=`<text x="${cx}" y="${H+18}" fill="${i===cur?'#e8e8e9':'#636366'}"
+        font-size="10" text-anchor="middle"
+        font-weight="${i===cur?'700':'400'}">${r.r}</text>`;
+    g+=`<rect class="chit" x="${PAD+i*cw}" y="0" width="${cw}" height="${H}" fill="transparent"
+        data-i="${i}"><title>R${r.r}｜本回合 ${fmtV(v[0],chartMode)}　累计 ${fmtV(v[1],chartMode)}</title></rect>`;
+  });
+  /* 累计线：中性灰，避免和阵营色抢 */
+  g+=`<polyline points="${pts}" fill="none" stroke="rgba(232,232,233,.55)" stroke-width="1.8"
+      stroke-linejoin="round" stroke-linecap="round"/>`;
+  /* 折线节点 + 当前回合数值 */
+  series.forEach((v,i)=>{
+    const cx=X(i), cy=H-(v[1]/scale)*H*0.9;
+    g+=`<circle cx="${cx}" cy="${cy}" r="${i===cur?3.4:2}"
+        fill="${i===cur?'#e8e8e9':'rgba(232,232,233,.6)'}" stroke="none"/>`;
+    if(i===cur){
+      g+=`<text x="${cx}" y="${cy-8}" fill="#e8e8e9" font-size="10.5"
+        text-anchor="middle" font-weight="700">${fmtV(v[1],chartMode)}</text>`;
+    }
+  });
+  box.innerHTML=`<svg width="${W}" height="${H+24}" viewBox="0 0 ${W} ${H+24}">${g}</svg>`;
+  box.querySelectorAll('.chit').forEach(el=>{
+    el.style.cursor='pointer';
+    el.onclick=()=>{cur=+el.dataset.i;now=R[cur].fz;stop();sync();};
+  });
+}
+
+/* ---- 经济图：双向对峙柱（我方上 / 敌方向下）+ 经济差折线 ---- */
+function drawEconChart(){
+  const box=$('#chart');
+  if(!box) return;
+  const lg=$('.cleg');
+  if(lg) lg.innerHTML='<b style="background:#5b8fd4"></b>CT 总经济 <b style="background:#d8a83c"></b>T 总经济 <b style="background:rgba(232,232,233,.55);height:2px"></b>经济差';
+  /* 固定画布宽度，回合数变化不改变面板尺寸 */
+  const n=R.length, PAD=78, H=380, W=1180;
+  const CELL=(W-PAD)/n;
+  const X=i=>PAD+(i+0.5)*CELL;
+  const mid=H/2, RANGE=H/2-26;
+  let maxE=4000;
+  R.forEach(r=>{ if(r.econ){ maxE=Math.max(maxE, r.econ.mine||0, r.econ.opp||0); }});
+  const sc=RANGE/maxE;
+  let g='';
+  /* 网格：正负对称 */
+  [1,0.5,0,-0.5,-1].forEach(k=>{
+    const y=mid-k*RANGE;
+    g+=`<line x1="${PAD}" y1="${y}" x2="${W}" y2="${y}" stroke="${k===0?'#3a3a3a':'#1e1e1f'}" stroke-width="1"/>`;
+    const v=Math.round(k*maxE);
+    g+=`<text x="${PAD-9}" y="${y+4}" fill="#6f6f73" font-size="10" text-anchor="end">${v===0?'0':(v>0?'+':'−')+Math.abs(v).toLocaleString('en-US')}</text>`;
+  });
+  /* 柱：我方阵营色向上，对方阵营色向下（换边自动跟随），柱端标具体值 */
+  const bw=Math.max(6,CELL*0.56);
+  const nth=v=>Math.round(v).toLocaleString('en-US');
+  R.forEach((r,i)=>{
+    const x=X(i);
+    const mine=(r.econ&&r.econ.mine)||0, opp=(r.econ&&r.econ.opp)||0;
+    const mySide=(r.econ&&r.econ.mine_side)||r.a_side||'CT', opSide=(r.econ&&r.econ.opp_side)||(mySide==='CT'?'T':'CT');
+    const on=(i===cur);
+    if(mine>0){
+      const y=mid-mine*sc;
+      g+=`<rect x="${x-bw/2}" y="${y.toFixed(1)}" width="${bw}" height="${(mine*sc).toFixed(1)}" fill="${SC(mySide)}" rx="0"/>`;
+      g+=`<text x="${x}" y="${Math.max(11,y-5).toFixed(1)}" fill="${on?'#e8e8e9':'#94949a'}"
+          font-size="${on?10:9}" text-anchor="middle" font-weight="${on?'700':'400'}"
+          >${nth(mine)}</text>`;
+    }
+    if(opp>0){
+      const y2=mid+opp*sc;
+      g+=`<rect x="${x-bw/2}" y="${mid}" width="${bw}" height="${(opp*sc).toFixed(1)}" fill="${SC(opSide)}" rx="0"/>`;
+      g+=`<text x="${x}" y="${Math.min(H-16,y2+11).toFixed(1)}" fill="${on?'#e8e8e9':'#94949a'}"
+          font-size="${on?10:9}" text-anchor="middle" font-weight="${on?'700':'400'}"
+          >${nth(opp)}</text>`;
+    }
+  });
+  /* 经济差折线 */
+  const pts=R.map((r,i)=>{
+    const d=((r.econ&&r.econ.mine)||0)-((r.econ&&r.econ.opp)||0);
+    return `${X(i)},${(mid-d*sc).toFixed(1)}`;
+  }).join(' ');
+  g+=`<polyline points="${pts}" fill="none" stroke="rgba(232,232,233,.55)" stroke-width="1.8" stroke-linejoin="round"/>`;
+  R.forEach((r,i)=>{
+    const d=((r.econ&&r.econ.mine)||0)-((r.econ&&r.econ.opp)||0);
+    const cy=mid-d*sc;
+    g+=`<circle cx="${X(i)}" cy="${cy.toFixed(1)}" r="${i===cur?3.4:2}"
+        fill="${i===cur?'#e8e8e9':'rgba(232,232,233,.6)'}" stroke="none"/>`;
+    /* 差值：永远放在远离中线的外侧，避免和 0 轴附近的柱值挤在一起 */
+    const txt=(d>0?'+':d<0?'−':'')+nth(Math.abs(d));
+    const ty=Math.max(11, Math.min(H-16, d>=0 ? cy-7 : cy+13));
+    g+=`<text x="${X(i)}" y="${ty.toFixed(1)}" fill="${i===cur?'#ffffff':'#b9b9be'}"
+        font-size="${i===cur?10:9}" text-anchor="middle" font-weight="${i===cur?'700':'400'}"
+        stroke="#0b0b0c" stroke-width="2.8" paint-order="stroke" style="paint-order:stroke"
+        >${txt}</text>`;
+  });
+  /* 回合号 + 点击区 */
+  R.forEach((r,i)=>{
+    g+=`<text x="${X(i)}" y="${H-6}" fill="${i===cur?'#fff':'#6f6f73'}" font-size="10" text-anchor="middle" font-weight="${i===cur?'700':'400'}">${r.r}</text>`;
+    const d=((r.econ&&r.econ.mine)||0)-((r.econ&&r.econ.opp)||0);
+    g+=`<rect class="chit" x="${PAD+i*CELL}" y="0" width="${CELL}" height="${H}" fill="transparent" data-i="${i}">
+      <title>R${r.r}｜我方 ${((r.econ&&r.econ.mine)||0).toLocaleString()} 敌方 ${((r.econ&&r.econ.opp)||0).toLocaleString()}｜差 ${d.toLocaleString()}</title></rect>`;
+  });
+  box.innerHTML=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${g}</svg>`;
+  box.querySelectorAll('.chit').forEach(el=>{
+    el.style.cursor='pointer';
+    el.onclick=()=>{cur=+el.dataset.i;now=R[cur].fz;stop();sync();};
+  });
+}
+
+/* ---- 本回合表现：单回合事件时间轴（参考图一） ---- */
+let perfPlayer=null;
+function buildRoundPerf(){
+  const pane=$('#tabPane');
+  if(!pane)return;
+  const r=R[cur];
+  const dur=Math.max(1,r.dur);
+  if(!perfPlayer){
+    const me=r.players.find(p=>p.isMe);
+    perfPlayer=(me||r.players[0]).name;
+  }
+  const sel=r.players.find(p=>p.name===perfPlayer)||r.players[0];
+  const kills=r.kills.filter(k=>k[0]<=now&&k[1]===sel.name);
+  const deaths=r.kills.filter(k=>k[0]<=now&&k[2]===sel.name);
+  const pct=t=>Math.max(0,Math.min(100,(t/dur)*100));
+  let ticks='';
+  const step=dur>120?30:15;
+  for(let t=0;t<=dur;t+=step){
+    ticks+=`<div class="rpTick" style="left:${pct(t)}%">${t}s</div>
+            <div class="rpTickLine" style="left:${pct(t)}%"></div>`;
+  }
+  let ev='';
+  kills.forEach(k=>{
+    ev+=`<div class="rpEv up" style="left:${pct(k[0])}%"
+      title="${fmt(k[0])}　${k[1]} ${k[3]}${k[4]?'爆头':''} → ${k[2]}">${wi('icon-death','rpi')}</div>`;
+  });
+  deaths.forEach(k=>{
+    ev+=`<div class="rpEv dn" style="left:${pct(k[0])}%"
+      title="${fmt(k[0])}　${k[1]||'世界'} ${k[3]} → ${k[2]}">${wi('icon-death','rpi')}</div>`;
+  });
+  let star='';
+  if(kills.length){
+    star=`<div class="rpStar" style="left:${pct(kills[0][0])}%" title="首杀 ${fmt(kills[0][0])}">★</div>`;
+  }
+  pane.innerHTML=`<div class="rpWrap">
+    <div class="rpTitle">${sel.name} 的本回合表现 · R${r.r}</div>
+    <div class="rpBar">
+      <select id="perfPlayer" class="csel">
+        ${r.players.map(p=>`<option value="${p.name}"${p.name===sel.name?' selected':''}>${p.name}${p.isMe?' (你)':''}</option>`).join('')}
+      </select>
+      <span class="rpStat">击杀 <b>${kills.length}</b> · 死亡 <b>${deaths.length}</b></span>
+      <span class="rpPlayPos">${fmt(now)} / ${fmt(dur)}</span>
+    </div>
+    <div class="rpBody">
+      <div class="rpAxis"></div>
+      <div class="rpPlay" style="left:${pct(now)}%"></div>
+      ${ticks}${ev}${star}
+    </div>
+  </div>`;
+  const ps=$('#perfPlayer');
+  if(ps)ps.onchange=()=>{perfPlayer=ps.value;buildRoundPerf();};
+}
+
+function sync(){
+  const r=R[cur];$('#time').max=r.dur;now=Math.min(now,r.dur);
+  buildRoster();buildRoundAxis();buildMarks();
+  if($('#tabpanel').classList.contains('on'))buildTab();
+  draw();
+}
+function stop(){playing=false;if(raf)cancelAnimationFrame(raf);raf=null;$('#play').textContent='▶';}
+let lt=0;
+function loop(ts){if(!playing)return;const dt=(ts-lt)/1000;lt=ts;
+  const r=R[cur],speed=(now<r.fz?6:1)*(opt.speed||1);now=Math.min(r.dur,now+dt*speed);draw();
+  if(now>=r.dur){stop();return;}raf=requestAnimationFrame(loop);}
+$('#play').onclick=e=>{const r=R[cur];if(now>=r.dur-0.02)now=0;
+  if(playing)stop();else{playing=true;lt=performance.now();e.currentTarget.textContent='⏸';raf=requestAnimationFrame(loop);}};
+$('#time').oninput=e=>{stop();now=parseFloat(e.target.value);draw();};
+/* #skip 的绑定在下面统一处理（要用 fz 而不是 0） */
+/* 数据面板开关（Tab 键）：按钮已移除，只留快捷键与关闭按钮 */
+function toggleTab(){
+  const p=$('#tabpanel'); if(!p) return;
+  p.classList.toggle('on');
+  if(p.classList.contains('on')) buildTab();
+}
+$('#tabclose').onclick=()=>$('#tabpanel').classList.remove('on');
+$('#cTrail').onchange=e=>{opt.trail=e.target.checked;draw();};
+/* 地图缩放：滚轮 + 拖拽 + 双击复位 */
+function clampView(){
+  const M=1024*view.s;
+  view.x=Math.min(0,Math.max(1024-M,view.x));
+  view.y=Math.min(0,Math.max(1024-M,view.y));
+}
+cv.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const rect=cv.getBoundingClientRect();
+  const kx=1024/rect.width,ky=1024/rect.height;
+  const mx=(e.clientX-rect.left)*kx,my=(e.clientY-rect.top)*ky;
+  const gx=(mx-view.x)/view.s,gy=(my-view.y)/view.s;
+  const ns=Math.max(1,Math.min(6,view.s*(e.deltaY<0?1.18:1/1.18)));
+  if(ns<=1.01){view.s=1;view.x=0;view.y=0;cv.style.cursor='default';}
+  else{view.s=ns;view.x=mx-gx*ns;view.y=my-gy*ns;clampView();cv.style.cursor='grab';}
+  draw();
+},{passive:false});
+let drag=null;
+cv.addEventListener('pointerdown',e=>{
+  if(view.s<=1.01)return;
+  drag={sx:e.clientX,sy:e.clientY,vx:view.x,vy:view.y};
+  try{cv.setPointerCapture(e.pointerId);}catch(_){}
+  cv.style.cursor='grabbing';
+});
+cv.addEventListener('pointermove',e=>{
+  if(!drag)return;
+  const rect=cv.getBoundingClientRect();
+  const k=1024/rect.width;
+  view.x=drag.vx+(e.clientX-drag.sx)*k;
+  view.y=drag.vy+(e.clientY-drag.sy)*k;
+  clampView();draw();
+});
+cv.addEventListener('pointerup',e=>{
+  if(!drag)return;
+  drag=null;cv.style.cursor=view.s>1.01?'grab':'default';
+  try{cv.releasePointerCapture(e.pointerId);}catch(_){}
+});
+cv.addEventListener('dblclick',()=>{view.s=1;view.x=0;view.y=0;cv.style.cursor='default';draw();});
+/* 变速：滑块（无边框），4 档 0.25/0.5/1/2/4 */
+const SPD=[0.25,0.5,1,2,4], SPD_LBL=['¼×','½×','1×','2×','4×'];
+const spdR=$('#spdRange');
+if(spdR){
+  const syncSpd=()=>{
+    const v=SPD[+spdR.value]||1;
+    opt.speed=v;
+    const l=$('#spdlbl'); if(l) l.textContent=SPD_LBL[+spdR.value]||'1×';
+  };
+  spdR.addEventListener('input',syncSpd);
+  syncSpd();
+}
+/* 回本回合开打时刻：fz（冻结结束）才是真正开始，0 秒是买枪准备期 */
+$('#skip').onclick=()=>{
+  const r=R&&R[cur]; if(!r) return;
+  stop();now=Math.max(0,r.fz||0);draw();
+};
+/* 跳到本回合下一次击杀（kills 的第 0 位是秒） */
+$('#nextkill').onclick=()=>{
+  const r=R&&R[cur]; if(!r) return;
+  const ks=(r.kills||[]).map(k=>k[0]).filter(t=>t>now+0.05).sort((a,b)=>a-b);
+  if(!ks.length){now=Math.max(0,(r.dur||0)-0.1);}
+  else{now=Math.min(r.dur,ks[0]);}
+  stop();draw();
+};
+/* 跳到本回合判定时刻：dur 是回合总长 */
+$('#roundend').onclick=()=>{
+  const r=R&&R[cur]; if(!r) return;
+  stop();now=Math.max(0,(r.dur||0)-0.1);draw();
+};
+/* 数据面板：Tab 键开关（按钮已移除） */
+document.addEventListener('keydown',e=>{
+  if(e.code==='Tab'){e.preventDefault();toggleTab();}
+  if(e.code==='Escape')$('#tabpanel').classList.remove('on');
+  if(e.code==='Space'){e.preventDefault();$('#play').click();}
+  if(e.code==='ArrowRight'){now=Math.min(R[cur].dur,now+1);draw();}
+  if(e.code==='ArrowLeft'){now=Math.max(0,now-1);draw();}
+  if(e.code==='ArrowDown'){if(cur<R.length-1){cur++;now=R[cur].fz;stop();sync();}}
+  if(e.code==='ArrowUp'){if(cur>0){cur--;now=R[cur].fz;stop();sync();}}
+});
+
+(async function(){
+  const qs=new URLSearchParams(location.search);
+  const mid=qs.get('m')||qs.get('match')||'1';
+  const res=await fetch('/api/replay?m='+encodeURIComponent(mid));
+  D=await res.json();
+  if(!D.rounds){$('#loading').textContent='加载失败: '+(D.error||'');return;}
+  R=D.rounds;
+  half=12;
+  const _m0=R[0].players.filter(p=>p.mine).map(p=>p.name);
+  const _hasMine=_m0.length>0 && _m0.length<R[0].players.length;
+  const mine0=_hasMine?_m0:R[0].players.filter(p=>p.side==='CT').map(p=>p.name);
+  const op0 =_hasMine?R[0].players.filter(p=>!p.mine).map(p=>p.name)
+                     :R[0].players.filter(p=>p.side==='T').map(p=>p.name);
+  const PERS=["#5ec8ff","#00d4aa","#7bd44b","#b8e04a","#5fd0d8",
+              "#ff6b6b","#ff9a3c","#ffcf3a","#ff9fd0","#c86bff"];
+  R.forEach(r=>{
+    // 编号按当前回合阵营分：CT 和 T 各自 1-5（与官方 HUD 一致，永远两位数以内）
+    const bySide = {CT: [], T: []};
+    r.players.forEach(p=>{ (bySide[p.side] || (bySide[p.side] = [])).push(p); });
+    bySide.CT.forEach((p,i)=>p.idx=i+1);
+    bySide.T.forEach((p,i)=>p.idx=i+1);
+    r.players.forEach(p=>{
+      const i=(p.mine?mine0:op0).indexOf(p.name);
+      p.pcolor=PERS[(p.mine?0:5)+Math.max(0,i)];
+    });
+  });
+  bg.onload=()=>draw();          /* 地图异步加载完成后再画一次 */
+  bg.onerror=()=>{console.warn('地图底图加载失败:',bg.src);draw();};
+  bg.src='/maps/'+D.map+'.png';
+  $('#loading').remove();
+  cur=0;now=R[0].fz;sync();
+  /* ?tab=stats|util|chart（chart 里再带 &mode=econ 可直接看经济图） */
+  const _qp=new URLSearchParams(location.search);
+  const _tg=(_qp.get('tab')||'').toLowerCase();
+  if(_tg && $('#tabpanel')){
+    const _alias={stats:'stats',util:'util',chart:'chart',trend:'chart',econ:'chart',rws:'chart'};
+    tabTab=_alias[_tg]||'chart';
+    const _cm=(_qp.get('mode')||'').toLowerCase();
+    if(_cm){ chartMode=_cm; }
+    else if(_tg==='econ'){ chartMode='econ'; }
+    toggleTab();
+  }
+})();
+
+
+/* ===== 玩家格烟雾：一次性 fbm 纹理 + 每格摆动取样（20fps） =====
+   纹理是域扭曲噪声，接近主页 shader 那套；每格只做一次 drawImage，
+   10 个格子的成本远低于开 10 个 WebGL context。 */
+(function plSmoke(){
+  if(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  const TW = 256, TH = 96, NFR = 8;
+
+  const hash = (x, y) => { const v = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123; return v - Math.floor(v); };
+  const sm = t => t * t * (3 - 2 * t);
+  const nz = (x, y) => {
+    const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+    const u = sm(xf), v = sm(yf);
+    const a = hash(xi, yi), b = hash(xi + 1, yi), c = hash(xi, yi + 1), d = hash(xi + 1, yi + 1);
+    return (a + (b - a) * u) * (1 - v) + (c + (d - c) * u) * v;
+  };
+  const fb = (x, y) => {
+    let v = 0, a = .55, px = x, py = y;
+    for(let i = 0; i < 4; i++){
+      v += a * nz(px, py);
+      const nx = px * .8 - py * .6, ny = px * .6 + py * .8;
+      px = nx * 2.03; py = ny * 2.03; a *= .5;
+    }
+    return v;
+  };
+  /* 每个玩家格用不同种子的噪声 → 图案本质不同，不只是相位错开。
+     4 套 × 8 帧，启动时一次性烘焙；玩家按格子顺序轮转分配。
+     套数太多会让首次加载变慢（每帧 256×96 逐像素 fbm）。 */
+  const SETS = 4;
+  const frameSets = [];
+  for(let si = 0; si < SETS; si++){
+    const SX = si * 17.31, SY = si * 9.77;     /* 种子偏移 */
+    const set = [];
+    for(let fi = 0; fi < NFR; fi++){
+      const tt = fi / NFR;
+      const c2 = document.createElement('canvas');
+      c2.width = TW; c2.height = TH;
+      const g2 = c2.getContext('2d');
+      const im = g2.createImageData(TW, TH);
+      for(let y = 0; y < TH; y++){
+        for(let x = 0; x < TW; x++){
+          const s = 2.6 / TH;
+          const u = x * s + SX, v = y * s + SY;
+          const qx = fb(u + tt * 1.6, v + tt * 1.1);
+          const qy = fb(u + 5.2 - tt * 1.2, v + 1.3 + tt * 0.9);
+          let val = fb(u + 2.6 * qx, v + 2.6 * qy);
+          const alt = fb(u * 1.35 - tt * 2.0, v * 0.92 + tt * 1.5);
+          val = val * 0.62 + alt * 0.38;
+          val = (val - 0.40) / 0.30;
+          val = val < 0 ? 0 : val > 1 ? 1 : val;
+          const k = (y * TW + x) * 4;
+          /* 黑色反转烟雾 */
+          im.data[k] = im.data[k + 1] = im.data[k + 2] = 0;
+          im.data[k + 3] = (val * 255) | 0;
+        }
+      }
+      g2.putImageData(im, 0, 0);
+      set.push(c2);
+    }
+    frameSets.push(set);
+  }
+
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const cells = [];
+
+  function sync(){
+    cells.length = 0;
+    let i = 0;
+    for(const c of document.querySelectorAll('.pl .plsmoke')){
+      const w = c.clientWidth, h = c.clientHeight;
+      i++;
+      if(!w || !h) continue;
+      const cw = Math.round(w * dpr), ch = Math.round(h * dpr);
+      if(c.width !== cw || c.height !== ch){ c.width = cw; c.height = ch; }
+      if(!c.__ctx) c.__ctx = c.getContext('2d');
+      cells.push({
+        c, ctx: c.__ctx,
+        /* 按格子顺序分配不同的噪声组，同一格刷新后保持不变 */
+        set: c.__set || (c.__set = frameSets[(i - 1) % SETS]),
+        ph: c.__ph || (c.__ph = Math.random()),
+        sp: c.__sp || (c.__sp = .12 + Math.random() * .10)
+      });
+    }
+  }
+
+  let last = 0;
+  function frame(ts){
+    requestAnimationFrame(frame);
+    if(ts - last < 50) return;               /* 20fps */
+    const dt = last ? Math.min(ts - last, 200) : 50;
+    last = ts;
+    sync();
+    for(const o of cells){
+      o.ph = (o.ph + o.sp * dt / 1000) % 1;
+      const p  = o.ph * NFR;
+      const ia = Math.floor(p) % NFR, ib = (ia + 1) % NFR;
+      const mixf = p - Math.floor(p);
+      const g = o.ctx, W = o.c.width, H = o.c.height;
+      const fs = o.set || frameSets[0];
+      g.clearRect(0, 0, W, H);
+      g.drawImage(fs[ia], 0, 0, W, H);
+      if(mixf > .01){ g.globalAlpha = mixf; g.drawImage(fs[ib], 0, 0, W, H); g.globalAlpha = 1; }
+    }
+  }
+  requestAnimationFrame(frame);
+})();
+
+/* 读同一份外观设置：主题色 / 背景 / 明暗自适应，跟主页保持一致 */
+fetch('/api/state').then(r=>r.json()).then(st=>{
+  const s = (st && st.settings) || {};
+  const tint = s.theme_tint || '6,6,7';
+  const rgb = String(tint).split(',').map(n => Math.max(0, Math.min(255, parseInt(n, 10) || 0)));
+  const root = document.documentElement;
+  root.style.setProperty('--tint', tint);
+  const lum = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
+  const dark = lum < 0.46;
+  const set = (k, v) => root.style.setProperty(k, v);
+  if(dark){
+    set('--txt', '#e9eaec'); set('--dim', '#8f8d89');
+    set('--rule', 'rgba(255,255,255,.15)'); set('--rule-soft', 'rgba(255,255,255,.07)');
+    set('--ov1', 'rgba(255,255,255,.06)');  set('--ov2', 'rgba(255,255,255,.12)');
+  } else {
+    set('--txt', '#17171a'); set('--dim', '#5b5955');
+    set('--rule', 'rgba(0,0,0,.20)'); set('--rule-soft', 'rgba(0,0,0,.10)');
+    set('--ov1', 'rgba(0,0,0,.05)');  set('--ov2', 'rgba(0,0,0,.10)');
+  }
+  root.dataset.theme = dark ? 'dark' : 'light';
+  /* 地图底：亮主题下把雷达底换成主题色的深色版（×0.24），避免一整块纯黑突兀 */
+  window.__mapBg = dark ? '#0a0a0b'
+    : '#' + rgb.map(v => Math.round(v * 0.24).toString(16).padStart(2, '0')).join('');
+  try { draw(); } catch(e){}
+}).catch(()=>{});
+
+</script></html>

@@ -1,0 +1,348 @@
+/* Demo 与逐场记录页 —— 数据管理、demo 列表、逐场明细集中在这里 */
+let S = { demos: [], overview: {}, players: [] };
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g,
+  c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const num = (v, d = 0) => (v == null || v === '' ? '—' : Number(v).toFixed(d));
+const nth = v => (v == null ? '—' : Number(v).toLocaleString('en-US'));
+
+const MAP_CN = {
+  de_dust2: '炙热沙城2', de_mirage: '荒漠迷城', de_inferno: '炼狱小镇',
+  de_ancient: '远古遗迹', de_anubis: '阿努比斯', de_nuke: '核子危机',
+  de_vertigo: '殒命大厦', de_overpass: '死亡游乐园', de_train: '列车停放站',
+  de_office: '办公室', de_italy: '意大利小镇', de_cache: '死城之谜',
+  de_cbble: '古堡激战', de_tuscan: '托斯卡纳',
+};
+const mapCn = m => MAP_CN[m] || String(m || '').replace(/^de_/, '');
+
+async function api(path, opt) { return await (await fetch(path, opt)).json(); }
+async function post(url, body) {
+  return await api(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}) });
+}
+function hint(msg, ok) {
+  const h = $('#opHint'); if (!h) return;
+  h.className = 'hint' + (ok ? ' ok' : '');
+  h.textContent = msg;
+}
+function table(cols, rows) {
+  if (!rows || !rows.length) return '<div class="nil">—</div>';
+  const th = cols.map(c => `<th class="${c.num ? 'num' : ''}"${c.title ? ` title="${esc(c.title)}"` : ''}>${esc(c.t)}</th>`).join('');
+  const tr = rows.map(r => '<tr>' + cols.map(c => {
+    const v = c.get ? c.get(r) : r[c.f];
+    return `<td class="${c.num ? 'num' : ''}">${v == null || v === '' ? '—' : v}</td>`;
+  }).join('') + '</tr>').join('');
+  return `<table class="tb"><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table>`;
+}
+const minibar = (v, max) => {
+  const w = max > 0 ? Math.round(Math.abs(v) / max * 100) : 0;
+  return `<span class="mbtr"><i class="mb" style="width:${w}%"></i></span>`;
+};
+
+let _scanned = false;
+async function load() {
+  // 首次进页面先静默扫一遍 demo 目录——scan 只在程序启动时自动跑过，
+  // 运行中新丢进目录的文件不会自己出现，得手动点「扫描目录」。
+  if (!_scanned) {
+    _scanned = true;
+    try { await post('/api/scan', {}); } catch (e) { /* 扫描失败不影响列表 */ }
+  }
+  S = await api('/api/state');
+  renderPlayers();
+  // 两个路径都显示：出问题时用户能直接找到 db 文件，不用猜
+  const _dp = S.paths?.demos || '', _db = S.paths?.db || '';
+  $('#demoPath').innerHTML =
+    `demo 目录：${_dp}${_db ? `<br>数 据 库：${_db}` : ''}`;
+  renderGames();
+  jobUI(S.job);
+  if (S.job && S.job.running) pollJob();
+  rPullLast();
+}
+
+/** 上次拉取结果：自动检查跑过之后，这里能看到时间和新增场次 */
+async function rPullLast() {
+  const el = $('#pullLast');
+  if (!el) return;
+  let r = null;
+  try { r = await api('/api/pull_result'); } catch (e) { return; }
+  if (!r || r.ok === null || r.ok === undefined) { el.textContent = ''; return; }
+  if (r.ok) {
+    const n = r.added ?? 0;
+    el.textContent = `上次检查 ${r.time || ''}：${n ? `新增 ${n} 场，已生成 ${r.bat || '下载清单'}` : '没有新比赛'}`;
+    el.style.color = n ? 'var(--ok)' : '';
+  } else {
+    el.textContent = `上次检查 ${r.time || ''}：失败 — ${r.error || '未知错误'}`;
+    el.style.color = 'var(--bad)';
+  }
+}
+
+function renderPlayers() {
+  const sel = $('#player');
+  if (!sel) return;
+  const ps = S.players || [];
+  if (!ps.length) { sel.innerHTML = '<option>暂无玩家</option>'; return; }
+  sel.innerHTML = ps.map(p =>
+    `<option value="${p.steamid}"${p.is_me ? ' selected' : ''}>${esc(p.name)}（${p.matches} 场）</option>`
+  ).join('');
+  sel.title = `共 ${ps.length} 名玩家；括号里是参与的场次`;
+  sel.onchange = async e => {
+    await post('/api/set_me', { steamid: Number(e.target.value) });
+    load();
+  };
+}
+
+/* 一张表管全部：demo 文件信息 + 该场统计 + 回放入口。
+   关联键是 match_id（未分析的 demo 没有 match_id，统计列留 —） */
+function renderGames() {
+  const ds = S.demos || [];
+  const tl = (S.overview || {}).timeline || [];
+  const byMid = {};
+  for (const t of tl) byMid[t.match_id] = t;
+
+  /* 已分析在前，按时间倒序；未分析的后 */
+  const rows = ds.map(d => ({ ...d, st: byMid[d.match_id] || null }))
+    .sort((a, b) => (b.played_at || b.mtime || '').localeCompare(a.played_at || a.mtime || ''));
+
+  $('#gameSub').textContent = `${rows.length} 个文件 · 已分析 ${rows.filter(r => r.analyzed).length}`;
+  if (!rows.length) {
+    $('#gameTable').innerHTML = '<div class="nil">目录里还没有 .dem 文件</div>';
+    return;
+  }
+
+  /* demos[] 没有 st 子对象，统计字段直接挂在 r 上（me_kills / me_adr / ...）。
+     比分 = 我方赢的回合 : 输的回合；加时局（>24 回合）单独标出来。 */
+  const hasRes = r => (r.rounds || 0) > 0;
+  const resOf = r => {
+    if (!hasRes(r)) return '—';
+    const w = r.wins || 0, t = r.rounds;
+    if (w * 2 > t) return '<span class="w">胜</span>';
+    if (w * 2 === t) return '<span class="d">平</span>';
+    return '<span class="l">负</span>';
+  };
+  const scoreOf = r => {
+    if (!hasRes(r)) return '—';
+    const w = r.wins || 0, t = r.rounds;
+    const ot = t > 24 ? '<span class="ot">加时</span>' : '';
+    return `${w}:${t - w}${ot}`;
+  };
+
+  $('#gameTable').innerHTML = table([
+    { t: '地图', get: r => `<div class="gmap" title="${esc(r.name)}">
+        <div class="mn">${esc(r.map ? mapCn(r.map) : '—')}</div>
+        <div class="fs">${r.size ? (r.size / 1048576).toFixed(0) + ' MB' : ''}</div>
+      </div>` },
+    { t: '开始时间', title: 'demo 文件名里的 Steam 比赛 id 右移 31 位 = 比赛「结束」时刻，减去这场比赛的实际时长就是「开始」时刻（和 Steam 比赛历史页对齐，实测差不到 1 分钟）',
+      get: r => `<span class="m">${esc((r.played_at || r.mtime || '').slice(5, 16))}</span>` },
+    { t: '比分', num: 1, get: scoreOf },
+    { t: '计入', title: '投降、摆烂、半路不打了的局在这里取消勾选——数据留在库里，但默认不参与平均、走势和能力画像。投降局在解析时已自动取消勾选',
+      get: r => (r.match_id
+        ? `<label class="sw" title="${esc(r.exclude_note
+              ? '已排除：' + r.exclude_note + '（勾上就恢复计入）'
+              : '取消勾选 = 这局不算数')}"><input type="checkbox" data-ex="${r.match_id}"${r.excluded ? '' : ' checked'}></label>`
+        : '<span class="m">—</span>') },
+    { t: '结果', num: 1, get: resOf },
+    { t: 'K', num: 1, get: r => r.me_kills ?? '—' },
+    { t: 'D', num: 1, get: r => r.me_deaths ?? '—' },
+    { t: 'A', num: 1, get: r => r.me_assists ?? '—' },
+    { t: 'ADR', num: 1, get: r => r.me_adr != null ? num(r.me_adr, 1) : '—' },
+    { t: 'KAST', num: 1, get: r => r.me_kast != null ? num(r.me_kast, 1) : '—' },
+    { t: 'Rating', num: 1, get: r => r.me_rating != null ? num(r.me_rating, 2) : '—' },
+    { t: 'Impact', num: 1, get: r => r.me_impact != null ? num(r.me_impact, 2) : '—' },
+    { t: '急停率', num: 1, get: r => (r.me_fire && r.me_stop != null)
+        ? Math.round(r.me_stop / r.me_fire * 100) + '%' : '—' },
+    { t: '首杀', num: 1, get: r => r.me_fk ?? '—' },
+    { t: '', num: 1, get: r => {
+        if (r.error) return `<span class="l" title="${esc(r.error)}">失败</span>`;
+        if (!r.analyzed) return `<button data-analyze="${esc(r.name)}">分析</button>`;
+        return `<span class="op"><a href="/replay.html?m=${r.match_id}">回放 →</a></span>`;
+      } },
+  ], rows);
+
+  $$('#gameTable button[data-analyze]').forEach(b => {
+    b.onclick = async () => {
+      const nm = b.dataset.analyze;
+      hint(`分析 ${nm}…`);
+      const r = await post('/api/analyze', { names: [nm] });
+      if (r.ok) pollJob(); else hint(r.error || '失败');
+    };
+  });
+}
+
+async function pollJob(doneMsg = '分析完成') {
+  const t = setInterval(async () => {
+    try {
+      const s = await api('/api/state');
+      S.job = s.job;
+      jobUI(s.job);
+      if (s.job && s.job.running) hint(`处理中 ${s.job.done}/${s.job.total}：${s.job.current || ''}`);
+      else { clearInterval(t); hint(doneMsg, true); load(); }
+    } catch (e) { clearInterval(t); }
+  }, 1200);
+}
+
+/* 顶栏进度条 */
+function jobUI(j) {
+  const el = $('#job');
+  if (!el) return;
+  if (j && j.running) {
+    el.classList.add('on');
+    const pct = j.total ? Math.round(j.done / j.total * 100) : 0;
+    const nm = (j.current || '').replace(/\.dem$/i, '').slice(0, 24);
+    $('#jobtext').textContent =
+      `处理中 ${j.done}/${j.total} · ${pct}%${nm ? ' · ' + nm : ''}`;
+    $('#progbar').style.width = pct + '%';
+  } else {
+    el.classList.remove('on');
+  }
+}
+
+$('#btnPull').onclick = async () => {
+  hint('从 CS2 replays 目录拉取…');
+  const r = await api('/api/pull');
+  if (!r.ok) { hint(r.error || '失败'); return; }
+  hint(`拉到 ${r.added} 个新 demo（已存在 ${r.skipped} 个）`, true);
+  load();
+};
+// 从 Steam 拉新比赛：读设置里的 key/auth/steamid/start_code，
+// 跑 cs2_pull_new.py 生成 steam:// 批量下载 bat。
+// 配置不全时后端返回 missing 列表，这里提示去哪儿填。
+$('#btnPullNew').onclick = async () => {
+  const b = $('#btnPullNew');
+  const old = b.textContent;
+  b.disabled = true;
+  b.textContent = '查询中…';
+  hidePull();
+  let pv = {};
+  try {
+    pv = await post('/api/pull_preview', {});
+  } catch (e) {
+    pv = { ok: false, error: String(e) };
+  }
+  b.disabled = false;
+  b.textContent = old;
+
+  const PH = { steam_api_key: 'Steam Web API Key', steam_auth_code: '游戏认证码',
+               steamid: 'SteamID64', start_code: '已处理到的分享码',
+               'cs2_pull_new.py': '拉取脚本' };
+  if (pv.need_setup) {
+    const miss = (pv.missing || []).map(k => PH[k] || k).join('、');
+    hint(`需要先配置：${miss}　→ 回主页点右上角「⚙ 设置」`, false);
+    return;
+  }
+  if (!pv.ok) { hint(pv.error || '查询失败', false); return; }
+  if (!pv.count) {
+    hint('没有新比赛' + (pv.error ? `（${pv.error}）` : ''), true);
+    return;
+  }
+
+  // 先把场数报出来，让用户决定要不要拉
+  const head = pv.codes.slice(0, 6).join('\n');
+  const more = pv.count > 6 ? `\n… 还有 ${pv.count - 6} 场` : '';
+  if (!confirm(`发现 ${pv.count} 场新比赛：\n\n${head}${more}\n\n开始拉取？\n\n（只生成下载清单，不会自动打开 CS2）`)) {
+    hint(`已取消，保留 ${pv.count} 场在待拉队列`);
+    return;
+  }
+
+  const r = await post('/api/pull_new', {});
+  if (!r.ok) {
+    if (r.need_setup) {
+      const miss = (r.missing || []).map(k => PH[k] || k).join('、');
+      hint(`需要先配置：${miss}`, false);
+      return;
+    }
+    hint(r.error || '启动失败', false);
+    return;
+  }
+  hint('拉取中…');
+  showPull();
+  pollPull();
+};
+
+function showPull() { const e = $('#pullBar'); if (e) e.hidden = false; }
+function hidePull() {
+  const e = $('#pullBar');
+  if (e) { e.hidden = true; const f = $('#pullFill'); if (f) f.style.width = '0'; }
+}
+
+async function pollPull() {
+  let p = {};
+  try { p = await api('/api/pull_progress'); } catch (e) { p = { state: 'error' }; }
+  const fill = $('#pullFill'), msg = $('#pullMsg');
+  if (!fill || !msg) return;
+  if (p.state === 'running') {
+    const n = p.done || 0;
+    // 查询阶段不知道总场数（Steam 只能一个个往后问），用推进式进度 + 实时场数
+    fill.style.width = `${Math.min(90, 10 + n * 6)}%`;
+    msg.textContent = `已查询 ${n} 场${p.current ? ' · ' + p.current : ''}`;
+    setTimeout(pollPull, 700);
+    return;
+  }
+  fill.style.width = '100%';
+  if (p.state === 'done') {
+    msg.textContent = p.msg || '完成';
+    hint(p.msg || '完成', true);
+    setTimeout(hidePull, 3000);
+    load();
+  } else if (p.state === 'error') {
+    msg.textContent = '失败：' + (p.error || '未知原因');
+    hint('拉取失败：' + (p.error || ''), false);
+    setTimeout(hidePull, 5000);
+  } else {
+    hidePull();
+  }
+}
+$('#btnScan').onclick = async () => {
+  hint('扫描中…');
+  const r = await post('/api/scan');
+  hint(r.ok ? `扫描完成，新增 ${r.added ?? 0}` : (r.error || '失败'), r.ok);
+  load();
+};
+$('#btnAnalyze').onclick = async () => {
+  hint('开始分析…');
+  const r = await post('/api/analyze', {});
+  if (r.ok) pollJob(); else hint(r.error || '失败');
+};
+$('#btnReparse').onclick = async () => {
+  if (!confirm('重新解析全部 demo？\n\n会清空现有分析结果并重新解析，每场约 8 秒。')) return;
+  hint('重新解析中…');
+  const r = await post('/api/reparse', {});
+  if (r.ok) pollJob(); else hint(r.error || '失败');
+};
+$('#btnExportCsv').onclick = () => { location.href = '/api/export/csv'; };
+
+// 全部删除：后端 /api/reset_all 清 16 张表 + 回放缓存 + 导出报告 + 设置，
+// 再重新扫描 demo 目录。demo 原始文件不动，但要重新分析。
+// 二次确认要求手打 DELETE——点错一次的代价是几十分钟的解析。
+$('#btnResetAll').onclick = async () => {
+  const ans = prompt(
+    '全部删除\n\n' +
+    '会清空：所有分析数据、回放缓存、导出报告、设置。\n' +
+    '不会删：demos 目录里的 .dem 原始文件（但需要重新分析）。\n\n' +
+    '确认请输入 DELETE（全大写）：');
+  if (ans === null) return;
+  if (ans !== 'DELETE') { hint('已取消（输入不匹配）', false); return; }
+  hint('正在清空…');
+  const r = await post('/api/reset_all', {});
+  if (!r.ok) { hint(r.error || '失败', false); return; }
+  pollJob('已全部清空');
+};
+
+// 「计入」勾选框：取消 = 这局不算数。事件委托挂 document 上只绑一次，
+// 避免每次重渲染重复叠加。
+document.addEventListener('change', async (e) => {
+  const cb = e.target.closest && e.target.closest('input[data-ex]');
+  if (!cb) return;
+  const mid = Number(cb.dataset.ex);
+  const on = cb.checked ? 0 : 1;
+  cb.disabled = true;
+  let r = {};
+  try { r = await post('/api/set_excluded', { match_id: mid, excluded: on }); }
+  catch (err) { r = { ok: false, error: String(err) }; }
+  cb.disabled = false;
+  if (!r.ok) { cb.checked = !cb.checked; hint(r.error || '失败', false); return; }
+  hint(on ? `match ${mid} 已排除，不计入平均与走势` : `match ${mid} 恢复计入`, true);
+  load();
+});
+
+load();
