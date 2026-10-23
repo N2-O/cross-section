@@ -281,10 +281,12 @@ $('#btnPullNew').onclick = async () => {
   // 四种结果分开说：网络不通 / 查询失败 / 确实没有新的 / 有 N 场
   if (pv.status === 'offline') {
     hint(`网络不通：${pv.error || '连不上 Steam API（直连和代理都试过）'}`, false);
+    checkPull();                 // 自动跑一遍自检，别让人自己去命令行查
     return;
   }
   if (pv.status === 'error' || !pv.ok) {
     hint(`查询失败：${pv.error || '未知原因'}`, false);
+    checkPull();
     return;
   }
   if (!pv.count) {
@@ -343,11 +345,44 @@ async function pollPull() {
   } else if (p.state === 'error') {
     msg.textContent = '失败：' + (p.error || '未知原因');
     hint('拉取失败：' + (p.error || ''), false);
+    checkPull();                 // 失败就地自检，省得再点一次
     setTimeout(hidePull, 5000);
   } else {
     hidePull();
   }
 }
+/* ===== 拉取配置自检：按钮点、失败自动跑，不用去命令行 ===== */
+async function checkPull() {
+  const box = $('#pullDiag');
+  if (!box) return;
+  const btn = $('#btnCheckPull');
+  if (btn) btn.disabled = true;
+  box.hidden = false;
+  box.innerHTML = '<div class="inf">正在检测配置（会真的请求一次 Steam，约十几秒）…</div>';
+  let r = null;
+  try {
+    r = await post('/api/check_pull', {});
+  } catch (e) {
+    box.innerHTML = `<div class="vd bad">自检请求失败：${esc(String(e))}</div>`;
+    if (btn) btn.disabled = false;
+    return;
+  }
+  if (btn) btn.disabled = false;
+  const rows = (r.steps || []).map(s => {
+    const cls = s.ok === true ? 'ok' : (s.ok === false ? 'bad' : 'inf');
+    const mark = s.ok === true ? '✓' : (s.ok === false ? '✗' : '·');
+    return `<i class="${cls}">${mark}</i><span><span class="nm">${esc(s.name || '')}</span>` +
+           `${esc(s.detail || '')}</span>`;
+  }).join('');
+  box.innerHTML = `<span class="cl" id="diagClose">关闭 ×</span>
+    <div class="dg">${rows || '<i class="inf">·</i><span class="inf">没有返回检查项</span>'}</div>
+    <div class="vd${r.ok ? '' : ' bad'}">${esc(r.verdict || '')}</div>`;
+  const c = $('#diagClose');
+  if (c) c.onclick = () => { box.hidden = true; };
+}
+const _btnCheckPull = $('#btnCheckPull');
+if (_btnCheckPull) _btnCheckPull.onclick = checkPull;
+
 $('#btnScan').onclick = async () => {
   hint('扫描中…');
   const r = await post('/api/scan');

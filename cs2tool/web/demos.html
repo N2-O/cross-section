@@ -36,6 +36,19 @@
 .tb .op .mini:hover{color:var(--txt)}
 .tb .op .mini.del{font-size: 14px}
 .tb .op .mini.del:hover{color:var(--bad)}
+/* 拉取配置自检：细框 + 两列（对勾/说明），结论单独一行 */
+#pullDiag{margin-top:12px;border:1px solid var(--line);border-radius:6px;
+  padding:12px 15px 13px;background:rgba(255,255,255,.018);font-size:13px;line-height:1.9}
+#pullDiag .cl{float:right;cursor:pointer;color:var(--dim);font-size:12px}
+#pullDiag .cl:hover{color:var(--txt)}
+#pullDiag .dg{display:grid;grid-template-columns:16px 1fr;gap:1px 8px}
+#pullDiag .dg i{font-style:normal;text-align:center}
+#pullDiag .dg .nm{color:var(--dim);margin-right:8px}
+#pullDiag .ok{color:var(--ok)}
+#pullDiag .bad{color:var(--bad)}
+#pullDiag .inf{color:var(--dim)}
+#pullDiag .vd{margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.07)}
+#pullDiag .vd.bad{color:var(--bad)}
 /* 危险操作：推到最右，红色描边，hover 反白 */
 #btnResetAll{margin-left:auto;color:var(--bad);border-color:#3a2222}
 #btnResetAll:hover{background:rgba(255,107,107,.14);border-color:var(--bad);color:#fff}
@@ -88,6 +101,7 @@
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button id="btnPull">⇩ 从 CS2 拉取</button>
         <button id="btnPullNew" title="按 Steam 账号设置，从比赛历史里找还没下载的对局">⇣ 从 Steam 拉新比赛</button>
+        <button id="btnCheckPull" title="检查 api key / auth_code / steamid / start_code 是否配套，不用自己猜">🔍 检查拉取配置</button>
         <button id="btnScan">扫描目录</button>
         <button id="btnAnalyze">分析未处理</button>
         <button id="btnReparse" title="把所有 demo 从头重新解析一遍（清空现有分析结果）">⟲ 全部重新解析</button>
@@ -95,6 +109,8 @@
         <button id="btnResetAll" title="清空所有分析数据、缓存、导出和设置（demo 原始文件不删）">⌫ 全部删除</button>
       </div>
       <div class="hint" id="opHint"></div>
+      <!-- 拉取配置自检结果：点「🔍 检查拉取配置」或拉取失败时自动出现 -->
+      <div id="pullDiag" hidden></div>
       <div id="pullBar" hidden style="margin-top:10px">
         <div style="height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden">
           <i id="pullFill" style="display:block;height:100%;width:0;background:var(--tint);transition:width .35s ease"></i>

@@ -1051,6 +1051,16 @@ class Handler(BaseHTTPRequestHandler):
                 # offline=连不上 Steam。后两个不能伪装成「没有新比赛」。
                 _pv["ok"] = _pv.get("status") not in ("error", "offline")
                 return self._send(*_json(_pv))
+            if u.path == "/api/check_pull":
+                # 拉取配置自检：界面「🔍 检查拉取配置」按钮、以及拉取失败时自动调。
+                # 懒加载——旧包只覆盖了部分文件时也不至于让整个服务起不来。
+                try:
+                    import check_pull as _cp
+                    return self._send(*_json(_cp.run_check(DATA_DIR)))
+                except Exception as e:
+                    return self._send(*_json({
+                        "ok": False, "steps": [], "player": None,
+                        "verdict": f"自检脚本本身出错：{type(e).__name__}: {e}"}))
             if u.path == "/api/set_excluded":
                 # 标记/取消标记「这局不算数」：投降、摆烂、半路不打了。
                 # 数据留在库里，只是默认不参与平均/走势/能力画像。

@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
-"""自检拉取配置：能自动判断的都判断掉，别让人逐项试。
+"""拉取配置自检：能自动判断的都判断掉，别让人逐项试。
 
-只读：不改库、不改配置、不推进 start_code。
+既是 CLI，也是 server 的 `/api/check_pull` 背后的实现（同一份逻辑，两条入口）：
 
-用法：
-    python cs2tool/check_pull.py                      # 用 <安装根>/data
-    python cs2tool/check_pull.py --data <data 目录>    # 与 server 的 --data 一致
+    python cs2tool/check_pull.py        # 命令行
+    界面 demos 页「🔍 检查拉取配置」      # 走 run_check()
 
 检查顺序（前面能过，后面的才需要人核对）：
   1. settings.json 在不在、四项齐不齐
   2. 三项格式对不对（steamid 17 位 / auth_code 4-5-4 / start_code CSGO-5x5）
   3. key 本身有没有效 + steamid 指向哪个账号（GetPlayerSummaries，能排除两项）
-  4. 才轮到 GetNextMatchSharingCode：200 有新比赛 / 202 已是最新 /
-     403 只剩「auth_code 与账号不符」或「start_code 不属于该账号」
+  4. 才轮到 GetNextMatchSharingCode：
+     200 有新比赛 / 202 已是最新 / 403 只剩「auth_code 与账号不符」或「start_code 不属于该账号」
 """
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import re
@@ -40,8 +38,8 @@ def mask(v: str) -> str:
     return f"{v[:6]}…{v[-4:]}（{len(v)} 字符）"
 
 
-def check_formats(cfg: dict) -> list[str]:
-    """格式不对的话 Steam 只会回 403，这里先把手抄错挡掉。"""
+def _bad_formats(cfg: dict) -> list[str]:
+    """格式不对时 Steam 只会回 403，这里先把手抄错挡掉。"""
     bad = []
     sid = str(cfg.get("steamid") or "").strip()
     if not re.fullmatch(r"\d{17}", sid):
@@ -63,126 +61,155 @@ def check_formats(cfg: dict) -> list[str]:
     return bad
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--data", default=None)
-    a = ap.parse_args()
+_OK_OP = None          # 记住哪条通道通（直连/代理），第二次请求就别再撞一遍
 
+
+def _get(url: str, timeout: int = 10):
+    """直连优先，不通再走系统代理；成功过的通道下次排前面。"""
+    global _OK_OP
+    direct = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    proxy = urllib.request.build_opener()
+    cands = ([_OK_OP] if _OK_OP else []) + [direct, proxy]
+    last = None
+    for op in cands:
+        try:
+            with op.open(urllib.request.Request(url, headers={"User-Agent": "cs2tool-check"}),
+                         timeout=timeout) as r:
+                _OK_OP = op
+                return r.status, r.read()
+        except urllib.error.HTTPError as e:
+            _OK_OP = op
+            return e.code, e.read()
+        except Exception as e:
+            last = e
+    raise last if last else RuntimeError("请求失败")
+
+
+def run_check(data_dir: str | None = None) -> dict:
+    """返回 {ok, verdict, steps:[{name, ok, detail}], player}，供界面直接渲染。"""
     here = os.path.dirname(os.path.abspath(__file__))
     root = os.path.dirname(here)
-    data = os.path.abspath(a.data) if a.data else os.path.join(root, "data")
     sp = os.path.join(root, "data", "settings.json")
+    steps: list[dict] = []
 
-    print(f"安装根：{root}")
-    print(f"data ：{data}")
-    print(f"\n[1] 配置文件：{sp}")
-    if not os.path.isfile(sp):
-        print("    ✗ 不存在 —— 设置页保存的东西没写到这里，或 server 的安装根不是这个目录")
-        return 1
+    def add(name, ok, detail=""):
+        steps.append({"name": name, "ok": bool(ok), "detail": detail})
+        return ok
+
+    def done(ok, verdict, player=None):
+        return {"ok": bool(ok), "verdict": verdict, "steps": steps,
+                "player": player, "settings": sp}
+
+    # ---- 1. 文件与四项是否齐
+    if not add("配置文件", os.path.isfile(sp), sp):
+        return done(False, "找不到 settings.json —— 先在设置页填一次，或确认工具的安装根没变")
     try:
         with open(sp, encoding="utf-8") as f:
             cfg = json.load(f)
     except Exception as e:
-        print(f"    ✗ 读不了：{type(e).__name__}: {e}")
-        return 1
-
-    missing = []
-    for k, name in KEYS:
-        v = str(cfg.get(k) or "").strip()
-        print(f"    {'✓' if v else '✗'} {k:<16} {name:<40} {mask(v) if v else '（空）'}")
-        if not v:
-            missing.append(k)
+        add("读取配置", False, f"{type(e).__name__}: {e}")
+        return done(False, "settings.json 读不了，内容可能坏了")
+    missing = [k for k, _ in KEYS if not str(cfg.get(k) or "").strip()]
+    add("四项配置", not missing,
+        "都填了" if not missing else "缺 " + "、".join(missing))
     if missing:
-        print(f"\n    ✗ 缺 {', '.join(missing)}")
-        return 1
+        return done(False, "还缺 " + "、".join(missing) + "，先去设置页补齐")
 
-    print("\n[2] 格式检查：")
-    bad = check_formats(cfg)
+    # ---- 2. 格式
+    bad = _bad_formats(cfg)
+    add("格式检查", not bad, "三项格式都对" if not bad else "；".join(bad))
     if bad:
-        for b in bad:
-            print(f"    ✗ {b}")
-        print("\n结论：照着上面的格式改，改完再跑一次。格式错的时候 Steam 一律回 403，"
-              "跟认证失败长得一样。")
-        return 1
-    print("    三项格式都对")
-
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    proxy = urllib.request.build_opener()
-
-    def get(url, timeout=15):
-        """直连优先，不通再走系统代理。"""
-        last = None
-        for op in (opener, proxy):
-            try:
-                with op.open(urllib.request.Request(url, headers={"User-Agent": "cs2tool-check"}),
-                             timeout=timeout) as r:
-                    return r.status, r.read()
-            except urllib.error.HTTPError as e:
-                return e.code, e.read()
-            except Exception as e:
-                last = e
-        raise last
+        return done(False, "格式就不对，Steam 会一律回 403（跟认证失败长得一样），照着提示改")
 
     key = str(cfg["steam_api_key"]).strip()
     sid = str(cfg["steamid"]).strip()
     auth = str(cfg["steam_auth_code"]).strip()
     start = str(cfg["start_code"]).strip()
 
-    # ---- 3. 用 key 查账号：能确认 key 有效 + steamid 指向谁（任何有效 key 都能查公开资料）
-    print("\n[3] 验 key 是否有效 + steamid 指向哪个账号：")
-    st, body = get(SUMMARIES + "?" + urllib.parse.urlencode(
-        {"key": key, "steamids": sid}))
+    # ---- 3. key 有效性 + steamid 指向谁（能排除两项）
+    try:
+        st, body = _get(SUMMARIES + "?" + urllib.parse.urlencode({"key": key, "steamids": sid}))
+    except Exception as e:
+        add("连通性", False, f"{type(e).__name__}: 直连和代理都连不上 api.steampowered.com")
+        return done(False, "网络不通：连不上 Steam API（先确认这台机器能打开 store.steampowered.com）")
     if st == 403:
-        print("    ✗ 403：这把 api key 无效或已被撤销")
-        print("\n结论：去 steamcommunity.com/dev/apikey 重新拿一把（用要拉比赛的那个账号登录）。")
-        return 1
+        add("API Key", False, "403：这把 key 无效或已被撤销")
+        return done(False, "去 steamcommunity.com/dev/apikey 重新拿一把（用要拉比赛的那个账号登录）")
     if st != 200:
-        print(f"    ✗ HTTP {st}：{body[:200].decode('utf-8', 'replace')}")
-        return 1
+        add("API Key", False, f"HTTP {st}")
+        return done(False, f"验证 key 时返回 HTTP {st}，把这句话贴给作者")
+    players = []
     try:
         players = json.loads(body).get("response", {}).get("players") or []
     except Exception:
-        players = []
+        pass
     if not players:
-        print("    ✗ key 有效，但查不到这个 steamid —— 这个号不存在（填错了）")
-        return 1
+        add("SteamID", False, "key 有效，但查不到这个 steamid——这个号不存在")
+        return done(False, "steamid 填错了（17 位那个号不存在）")
+    pname = players[0].get("personaname") or "(无名)"
+    add("API Key", True, "有效")
+    add("SteamID", True, f"{sid} → 账号「{pname}」")
+    if data_dir:
+        add("数据目录", True, data_dir)
 
-    p = players[0]
-    print(f"    ✓ key 有效")
-    print(f"    → steamid {sid} 的账号名是「{p.get('personaname')}」")
-    print(f"      （如果不是你的号，说明 steamid 填错了；这一项错了 Steam 也是回 403）")
-
-    # ---- 4. 才到真正要 code 的接口
-    print("\n[4] 拉取接口（GetNextMatchSharingCode）：")
-    st, body = get(API + "?" + urllib.parse.urlencode(
-        {"key": key, "steamid": sid, "steamidkey": auth, "knowncode": start}))
+    # ---- 4. 真正要 code 的接口
+    try:
+        st, body = _get(API + "?" + urllib.parse.urlencode(
+            {"key": key, "steamid": sid, "steamidkey": auth, "knowncode": start}))
+    except Exception as e:
+        add("拉取接口", False, f"{type(e).__name__}")
+        return done(False, "连不上拉取接口，稍后重试", pname)
     text = (body or b"").decode("utf-8", "replace")[:400]
-    print(f"    HTTP {st}  {text[:200]}")
+
     if st == 200:
         try:
             nxt = json.loads(text).get("result", {}).get("nextcode")
         except Exception:
             nxt = None
         if nxt:
-            print(f"\n结论：通了。下一场分享码 {nxt}")
-        else:
-            print("\n结论：200 但没 nextcode，返回格式变了。")
-    elif st == 202:
-        print("\n结论：202 = start_code 已经是最新一条，后面没有更新的比赛了。")
-        print("     刚打完的局要等官方生成分享码（几分钟到几小时）。")
-    elif st in (401, 403):
-        print("\n结论：key 有效、steamid 是「%s」、三项格式都对，所以只剩两种："
-              % p.get("personaname"))
-        print("     ① auth_code 不是这个账号的（它来自 CS2「观看 → 你的比赛」分享链接里的 "
-              "?steamidkey=，不是 Steam Guard 验证码）")
-        print("     ② start_code 不是你账号里的一条分享码（拿别人的、自己编的都会 403）")
-        print("     最省事的做法：从 CS2 里随便复制一场你的比赛分享链接，")
-        print("     里面那条 CSGO-… 就是合法的 start_code，auth_code 从同一个页面拿，别分开抄。")
-    elif st == 503:
-        print("\n结论：503 = 调用太频繁，等 10 分钟再试。")
-    else:
-        print(f"\n结论：没见过的状态码 {st}，把返回体贴给我。")
-    return 0
+            add("拉取接口", True, "有新比赛：" + nxt)
+            return done(True, f"配置没问题，下一场分享码 {nxt}", pname)
+        add("拉取接口", False, "200 但没有 nextcode")
+        return done(False, "接口返回格式变了，把返回体贴给作者", pname)
+
+    if st == 202:
+        add("拉取接口", True, "202 = start_code 已是最新一条")
+        return done(True, "配置没问题，只是还没有更新的比赛（刚打完要等官方生成分享码）", pname)
+
+    if st in (401, 403):
+        add("拉取接口", False, f"HTTP {st}")
+        add("auth_code", None, f"{mask(auth)}")
+        add("start_code", None, mask(start))
+        return done(False,
+                    f"key 有效、steamid 是「{pname}」、格式都对，所以只剩两种可能："
+                    "① auth_code 不是这个账号的（来自 CS2「观看 → 你的比赛」分享链接里的 "
+                    "?steamidkey=，不是 Steam Guard 验证码）；"
+                    "② start_code 不是你账号里的一条分享码（拿别人的、自己编的都会 403）。"
+                    "最省事：从 CS2 复制一场你自己的比赛分享链接，里面的 CSGO-… 就是合法 start_code",
+                    pname)
+
+    if st == 503:
+        add("拉取接口", False, "503 = 调用过频")
+        return done(False, "调用太频繁，等 10 分钟再试", pname)
+
+    add("拉取接口", False, f"HTTP {st}")
+    return done(False, f"没见过的状态码 {st}，把「{text[:120]}」贴给作者", pname)
+
+
+def main() -> int:
+    # CLI：加 --data 只为跟 server 的说法对齐（配置固定在 <安装根>/data）
+    data = None
+    for i, a in enumerate(sys.argv):
+        if a == "--data" and i + 1 < len(sys.argv):
+            data = os.path.abspath(sys.argv[i + 1])
+    r = run_check(data)
+    print(f"安装根：{os.path.dirname(os.path.dirname(os.path.abspath(__file__)))}")
+    print(f"配置文件：{r['settings']}\n")
+    for i, s in enumerate(r["steps"], 1):
+        mark = "✓" if s["ok"] is True else ("✗" if s["ok"] is False else "·")
+        print(f"  {mark} {s['name']:<10} {s['detail']}")
+    print("\n结论：" + r["verdict"])
+    return 0 if r["ok"] else 1
 
 
 if __name__ == "__main__":
