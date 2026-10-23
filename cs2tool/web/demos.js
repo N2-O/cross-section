@@ -72,13 +72,14 @@ async function rPullLast() {
     el.textContent = `上次检查 ${t}：网络不通 —— ${r.error || '连不上 Steam API'}`;
     el.style.color = 'var(--bad)';
   } else if (r.status === 'error' || r.ok === false) {
-    el.textContent = `上次检查 ${t}：查询失败 —— ${r.error || '未知错误'}`;
+    el.textContent = `上次检查 ${t}：${r.msg || '失败'}${r.error ? ' —— ' + r.error : ''}`;
     el.style.color = 'var(--bad)';
   } else if (r.status === 'empty' || !(r.added)) {
     el.textContent = `上次检查 ${t}：没有新比赛（已是最新的）`;
     el.style.color = '';
   } else {
-    el.textContent = `上次检查 ${t}：新增 ${r.added} 场，已生成 ${r.bat || '下载清单'}`;
+    // msg 已经是人话（「已下载 4 场」/「新增 4 场」），直接用它
+    el.textContent = `上次检查 ${t}：${r.msg || '新增 ' + r.added + ' 场'}`;
     el.style.color = 'var(--ok)';
   }
 }

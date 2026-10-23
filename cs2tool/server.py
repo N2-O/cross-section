@@ -612,6 +612,21 @@ def _http_pull_worker(codes):
     finally:
         _http_pull["running"] = False
         _http_pull["bytes"] = _http_pull["bytes_total"] = 0
+        # 把真实结果写成「上次检查」那一行，别让它还挂着「已生成 bat」这种过时文案
+        _okc = int(_http_pull.get("ok_count") or 0)
+        _failc = int(_http_pull.get("fail_count") or 0)
+        _msg = (f"已下载 {_okc} 场" + (f"，失败 {_failc} 场" if _failc else "")
+                if _okc else (f"下载失败 {_failc} 场" if _failc else "没有可下载的场次"))
+        try:
+            with open(os.path.join(DATA_DIR, "pull_last.json"), "w", encoding="utf-8") as f:
+                json.dump({"t": time.strftime("%Y-%m-%d %H:%M:%S"),
+                           "ok": _failc == 0 and _okc > 0,
+                           "status": "ok" if _okc and not _failc else "error",
+                           "added": _okc, "failed": _failc, "msg": _msg,
+                           "errors": (_http_pull.get("errors") or [])[:3]},
+                          f, ensure_ascii=False, indent=2)
+        except OSError:
+            pass
 
 
 def api_playdemo(name: str):

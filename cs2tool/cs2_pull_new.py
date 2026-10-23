@@ -244,11 +244,10 @@ def main() -> int:
                         "status": "ok", "added": len(new), "codes": new,
                         "bat": os.path.basename(BAT), "start_code": code,
                         "warning": err or None,
-                        "msg": f"新增 {len(new)} 场，已生成 {os.path.basename(BAT)}"
+                        "msg": f"新增 {len(new)} 场"
                                + (f"（查到第 {len(new)+1} 场时出错：{err}）" if err else "")})
     progress(state="done", done=len(new), total=len(new), mode="pull",
-             msg=f"新增 {len(new)} 场，清单已生成"
-                 + (f"；中途出错：{err}" if err else ""))
+             msg=f"新增 {len(new)} 场" + (f"；中途出错：{err}" if err else ""))
     return 0
 
 
