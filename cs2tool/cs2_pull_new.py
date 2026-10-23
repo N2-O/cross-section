@@ -112,7 +112,11 @@ def main() -> int:
                     if e.code == 202:
                         return "n/a"          # 没有更新的比赛了
                     if e.code in (401, 403):
-                        return "err:认证不过（api key / auth_code / steamid 不是同一套）"
+                        # Steam 对这三类情况都回 403，不区分：
+                        #   api key 不属于这个 steamid / auth_code 不对 / start_code 不是本人的分享码
+                        return ("err:认证不过（403）。三种可能：① api key 不是这个 steamid "
+                                "本人申请的；② auth_code（steamidkey）填错；③ 起点 start_code "
+                                "不是你账号里的一条分享码")
                     if e.code == 503:
                         return "err:调用过频，等 10 分钟再试"
                     last = f"HTTP {e.code}"

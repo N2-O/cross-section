@@ -142,9 +142,14 @@ def main() -> int:
         print("     打过新比赛还没出现？CS2 要等比赛结束后官方生成分享码，通常几分钟到几小时。")
     elif status in (401, 403):
         print(f"    返回体：{text}")
-        print("\n结论：认证不过。多半是 api key、auth_code（steamidkey）、steamid 三样不是同一套：")
-        print("     · API Key 必须属于这个 steamid 本人（steamcommunity.com/dev/apikey 用同账号登录生成）")
-        print("     · auth_code 来自 CS2 里「观看 → 你的比赛」那条 demo 的分享链接（?steamidkey=...）")
+        print("\n结论：认证不过。Steam 对下面三种情况都回 403，不区分：")
+        print("     ① API Key 不是这个 steamid 本人申请的")
+        print("        （steamcommunity.com/dev/apikey，用要拉的那个 Steam 账号登录去申请）")
+        print("     ② auth_code 不对：它来自 CS2 里「观看 → 你的比赛」点某场 → 「复制分享链接」，")
+        print("        链接里 ?steamidkey= 后面那一串，形如 93JQ-5N8HM-VV4B")
+        print("     ③ start_code 不是你账号里的一条分享码：它必须是你某场 demo 的 CSGO-xxxxx-…，")
+        print("        不能拿别人的，也不能自己编")
+        print("     三项任意一项错都只是 403，看不出来是哪一项——所以只能逐项核对。")
     elif status == 503:
         print("\n结论：503 = 调用太频繁，等 10 分钟再试")
     else:
