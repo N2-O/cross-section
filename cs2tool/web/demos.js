@@ -66,6 +66,8 @@ async function load() {
     }
   }
   S = await api('/api/state');
+  const dv = $('#dver');
+  if (dv) dv.textContent = S.version ? 'v' + S.version : 'v?（后端未重启）';
   renderPlayers();
   // 两个路径都显示：出问题时用户能直接找到 db 文件，不用猜
   const _dp = S.paths?.demos || '', _db = S.paths?.db || '';
@@ -399,15 +401,17 @@ async function httpPullWatch() {
   const total = Number(p.total || 0), done = Number(p.done || 0);
   const mb = n => (Number(n || 0) / 1048576).toFixed(1);
 
-  // 上条：总场次
-  const fAll = $('#pullFill'), tAll = $('#pullFillTxt');
-  if (fAll && total) fAll.style.width = `${Math.round(done / total * 100)}%`;
-  if (tAll) tAll.textContent = total ? `${done}/${total} 场` : '';
-  // 下条：当前这一场的字节进度
-  const fOne = $('#pullFillOne'), tOne = $('#pullFillOneTxt');
+  // 上条：总场次。要算上「当前这一场已下的小数」，否则整场下载期间它一直停在 0%
   const bt = Number(p.bytes_total || 0), bb = Number(p.bytes || 0);
-  if (fOne) fOne.style.width = `${bt ? Math.round(bb / bt * 100) : 0}%`;
-  if (tOne) tOne.textContent = bt ? `${mb(bb)}/${mb(bt)} MB` : (bb ? `${mb(bb)} MB` : '—');
+  const frac = bt > 0 ? Math.min(1, bb / bt) : 0;
+  const fAll = $('#pullFill'), tAll = $('#pullFillTxt');
+  if (fAll && total) fAll.style.width = `${Math.round(((done + frac) / total) * 100)}%`;
+  if (tAll) tAll.textContent = total ? `${done}/${total} 场` : '';
+  // 下条：当前这一场的字节进度（拿不到总长时只显示已下多少）
+  const fOne = $('#pullFillOne'), tOne = $('#pullFillOneTxt');
+  if (fOne) fOne.style.width = `${bt > 0 ? Math.round(bb / bt * 100) : 0}%`;
+  if (tOne) tOne.textContent = bt > 0 ? `${mb(bb)}/${mb(bt)} MB`
+                                      : (bb ? `${mb(bb)} MB` : '—');
 
   if (p.running) {
     msg.textContent = `正在下载第 ${Math.min(done + 1, total)} 场${p.current ? '：' + p.current : ''}`;

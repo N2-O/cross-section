@@ -595,8 +595,11 @@ def _http_pull_worker(codes):
     os.makedirs(tmp, exist_ok=True)
 
     def _prog(done, total):
-        _http_pull["bytes"] = int(done or 0)
-        _http_pull["bytes_total"] = int(total or 0)
+        # demoget 拿不到 Content-Length 时 total 会传 -1；别让它变成负宽度
+        d = int(done or 0)
+        t = int(total or 0)
+        _http_pull["bytes"] = d
+        _http_pull["bytes_total"] = t if t > 0 else 0
 
     try:
         for i, code in enumerate(codes, 1):
@@ -628,6 +631,8 @@ def _http_pull_worker(codes):
                            "ok": _failc == 0 and _okc > 0,
                            "status": "ok" if _okc and not _failc else "error",
                            "added": _okc, "failed": _failc, "msg": _msg,
+                           # 失败也要留着 codes —— 重试时靠它，别让 start_code 推进后无法补下
+                           "codes": list(codes),
                            "errors": (_http_pull.get("errors") or [])[:3]},
                           f, ensure_ascii=False, indent=2)
         except OSError:
