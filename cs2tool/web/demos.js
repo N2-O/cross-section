@@ -173,9 +173,10 @@ function renderGames() {
         ? Math.round(r.me_stop / r.me_fire * 100) + '%' : '—' },
     { t: '首杀', num: 1, get: r => r.me_fk ?? '—' },
     { t: '', num: 1, get: r => {
-        // 行内三个操作：看回放 / 只重解析这一场 / 从列表移除
+        // 行内操作：看回放 / 控制台播放 / 重解析 / 移除
         const nm = esc(r.name);
-        const tail = `<button class="mini" data-reparse="${nm}" title="只重新解析这一场（约 8 秒）">⟲</button>` +
+        const tail = `<button class="mini" data-play="${nm}" title="把 demo 放进 CS2 目录并复制 playdemo 命令，粘进控制台就能看">⌨</button>` +
+                     `<button class="mini" data-reparse="${nm}" title="只重新解析这一场（约 8 秒）">⟲</button>` +
                      `<button class="mini del" data-del="${nm}" title="从列表移除这场（只删分析结果，原始 .dem 文件不动）">✕</button>`;
         if (r.error) return `<span class="op"><span class="l" title="${esc(r.error)}">失败</span>${tail}</span>`;
         if (!r.analyzed) return `<span class="op"><button data-analyze="${nm}">分析</button>${tail}</span>`;
@@ -189,6 +190,22 @@ function renderGames() {
       hint(`分析 ${nm}…`);
       const r = await post('/api/analyze', { names: [nm] });
       if (r.ok) pollJob(); else hint(r.error || '失败');
+    };
+  });
+
+  /* 控制台看回放：把 demo 送进 CS2 的 csgo 目录，复制 playdemo 命令 */
+  $$('#gameTable button[data-play]').forEach(b => {
+    b.onclick = async () => {
+      const nm = b.dataset.play;
+      hint('准备 demo（可能要把文件复制到 CS2 目录，大文件要几秒）…');
+      const r = await post('/api/playdemo', { name: nm });
+      if (!r.ok) { hint(r.error || '失败', false); return; }
+      let copied = true;
+      try { await navigator.clipboard.writeText(r.cmd); }
+      catch (e) { copied = false; prompt('复制这行命令，粘进 CS2 控制台：', r.cmd); }
+      const extra = r.mode === 'abs' ? '　（没找到 CS2 目录，用的是绝对路径）' : '';
+      hint(copied ? `已复制：${r.cmd}　粘进 CS2 控制台回车${extra}`
+                  : `命令：${r.cmd}${extra}`, true);
     };
   });
 
@@ -297,7 +314,8 @@ $('#btnPullNew').onclick = async () => {
   // 先把场数报出来，让用户决定要不要拉
   const head = pv.codes.slice(0, 6).join('\n');
   const more = pv.count > 6 ? `\n… 还有 ${pv.count - 6} 场` : '';
-  if (!confirm(`发现 ${pv.count} 场新比赛：\n\n${head}${more}\n\n开始拉取？\n\n（只生成下载清单，不会自动打开 CS2）`)) {
+  if (!confirm(`发现 ${pv.count} 场新比赛：\n\n${head}${more}\n\n` +
+               '直接用工具下载？（走断点续传，可关掉页面；每场 150-250 MB）')) {
     hint(`已取消，保留 ${pv.count} 场在待拉队列`);
     return;
   }
@@ -312,17 +330,59 @@ $('#btnPullNew').onclick = async () => {
     hint(r.error || '启动失败', false);
     return;
   }
-  hint('拉取中…');
+  // 清单已写进 pull_pending.json，这里直接让工具去 Valve 的 CDN 下载
   showPull();
-  pollPull();
+  const hp = await post('/api/http_pull', {});
+  if (hp.ok) {
+    hint('开始下载…');
+    httpPullWatch();
+  } else {
+    // 下载模块不可用 → 退回老路：生成清单让你双击 bat
+    hint(hp.error || '直连下载不可用，改用 CS2 下载', false);
+    pollPull();
+  }
 };
 
-let _dlTimer = null;                 // 下载监视的定时器（hidePull 里要清，所以先声明）
+let _dlTimer = null;                 // CS2 下载监视的定时器
+let _hpTimer = null;                 // HTTP 直下进度的定时器（hidePull 里要清，所以先声明）
 function showPull() { const e = $('#pullBar'); if (e) e.hidden = false; }
 function hidePull() {
   clearTimeout(_dlTimer);
+  clearTimeout(_hpTimer);
   const e = $('#pullBar');
   if (e) { e.hidden = true; const f = $('#pullFill'); if (f) f.style.width = '0'; }
+}
+
+/* ===== HTTP 直下进度（工具自己下，不经过 CS2） ===== */
+async function httpPullWatch() {
+  clearTimeout(_hpTimer);
+  const msg = $('#pullMsg'), fill = $('#pullFill');
+  if (!msg) return;
+  let p = null;
+  try { p = await api('/api/http_pull_progress'); } catch (e) { return; }
+  const total = Number(p.total || 0), done = Number(p.done || 0);
+  const mb = n => (Number(n || 0) / 1048576).toFixed(1);
+  if (fill && total) fill.style.width = `${Math.round(done / total * 100)}%`;
+  const cur = p.bytes_total ? ` · 当前 ${mb(p.bytes)}/${mb(p.bytes_total)} MB` : '';
+  if (p.running) {
+    msg.textContent = `下载中 ${done}/${total}${cur}`;
+    _hpTimer = setTimeout(httpPullWatch, 1000);
+    return;
+  }
+  const okc = Number(p.ok_count || 0), failc = Number(p.fail_count || 0);
+  if (p.error) {
+    msg.textContent = `下载出错：${p.error}`;
+    hint(p.error, false);
+  } else if (failc) {
+    const first = (p.errors || [])[0] || '';
+    msg.textContent = `完成 ${okc} 场，失败 ${failc} 场${first ? '：' + first : ''}`;
+    hint(`有 ${failc} 场没下成，再点一次会从断点续传`, false);
+  } else {
+    msg.textContent = `${okc} 场已下载并解压到 demos`;
+    hint('下载完成，点「分析未处理」开始解析', true);
+    setTimeout(hidePull, 4000);
+  }
+  load();
 }
 
 /* ===== 下载进度 =====

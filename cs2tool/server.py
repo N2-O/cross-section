@@ -520,7 +520,6 @@ def _replays_dir():
 
 def api_pull():
     """从 CS2 的 replays 目录把新 demo 复制过来。
-
     CS2 客户端里「下载 demo」后文件落在 <CS2>/game/csgo/replays/*.dem，
     用户不用手动去文件夹里翻。路径优先用设置里的 replays_dir，
     没有就按 cs2_dir 推，再没有就自动探测。
@@ -553,6 +552,110 @@ def api_pull():
         store2.scan_demos(_conn, DEMO_DIR)
     return {"ok": True, "src": src, "added": len(added), "skipped": skipped,
             "failed": failed[:5], "names": added[:50]}
+
+
+# ---------------------------------------------------------------- HTTP 直下
+# 绕开 CS2 客户端：分享码本地解出 matchId，扫 Valve 的 CDN 分片找到 .dem.bz2，
+# 直接 HTTP 下载（支持 Range 续传）。比「双击 bat 让 CS2 下」稳，也能走代理。
+_http_pull = {"running": False, "total": 0, "done": 0, "current": "",
+              "bytes": 0, "bytes_total": 0, "error": None,
+              "ok_count": 0, "fail_count": 0, "errors": []}
+
+
+def api_http_pull(codes=None):
+    if _http_pull["running"]:
+        return {"ok": False, "error": "已有下载任务在进行"}
+    if not codes:
+        try:
+            with open(os.path.join(DATA_DIR, "pull_pending.json"), encoding="utf-8") as f:
+                codes = (json.load(f) or {}).get("codes") or []
+        except Exception:
+            codes = []
+    if not codes:
+        return {"ok": False, "error": "没有待下载的清单——先点「从 Steam 拉新比赛」"}
+    try:
+        import demoget  # 懒加载：老包里没这个文件也不影响其它功能
+    except Exception as e:
+        return {"ok": False, "error": f"下载模块不可用：{e}"}
+    _http_pull.update({"running": True, "total": len(codes), "done": 0, "current": "",
+                       "bytes": 0, "bytes_total": 0, "error": None,
+                       "ok_count": 0, "fail_count": 0, "errors": []})
+    threading.Thread(target=_http_pull_worker, args=(list(codes),), daemon=True).start()
+    return {"ok": True, "total": len(codes)}
+
+
+def _http_pull_worker(codes):
+    import demoget
+    tmp = os.path.join(DATA_DIR, "dl")
+    os.makedirs(tmp, exist_ok=True)
+
+    def _prog(done, total):
+        _http_pull["bytes"] = int(done or 0)
+        _http_pull["bytes_total"] = int(total or 0)
+
+    try:
+        for i, code in enumerate(codes, 1):
+            _http_pull["current"] = str(code)
+            _http_pull["bytes"] = _http_pull["bytes_total"] = 0
+            r = demoget.download_one(str(code), DEMO_DIR, tmp, log=print, progress=_prog)
+            _http_pull["current"] = r.get("body") or str(code)
+            if r.get("ok"):
+                _http_pull["ok_count"] = _http_pull.get("ok_count", 0) + 1
+            else:
+                _http_pull["fail_count"] = _http_pull.get("fail_count", 0) + 1
+                _http_pull["errors"] = (_http_pull.get("errors") or []) + [r.get("error")]
+            _http_pull["done"] = i
+        with _lock:
+            store2.scan_demos(_conn, DEMO_DIR, _cfg_steamid())
+    except Exception as e:
+        _http_pull["error"] = f"{type(e).__name__}: {e}"
+    finally:
+        _http_pull["running"] = False
+        _http_pull["bytes"] = _http_pull["bytes_total"] = 0
+
+
+def api_playdemo(name: str):
+    """生成 CS2 控制台的 playdemo 命令。
+
+    playdemo 默认只在 CS2 的 game/csgo 目录里找文件，所以先把 demo 复制过去
+    （同名同大小就跳过，避免每次拷 200 MB）。找不到 CS2 目录时退回绝对路径写法，
+    能不能用取决于 CS2 版本，所以在返回值里标 mode，前端会提示。
+    """
+    nm = os.path.basename(str(name or "").strip())
+    if not nm:
+        return {"ok": False, "error": "缺少文件名"}
+    src = os.path.join(DEMO_DIR, nm)
+    if not os.path.isfile(src):
+        return {"ok": False, "error": f"找不到文件：{src}"}
+
+    st = S.load() or {}
+    cs2 = st.get("cs2_dir") or ""
+    if not cs2:
+        try:
+            cs2 = (_detect_cs2() or {}).get("cs2_dir") or ""
+        except Exception:
+            cs2 = ""
+    if cs2:
+        csgo = os.path.join(cs2, "game", "csgo")
+        if os.path.isdir(csgo):
+            dst = os.path.join(csgo, nm)
+            copied = False
+            need = True
+            try:
+                if os.path.isfile(dst) and os.path.getsize(dst) == os.path.getsize(src):
+                    need = False
+            except OSError:
+                need = True
+            if need:
+                try:
+                    shutil.copy2(src, dst)
+                    copied = True
+                except OSError as e:
+                    return {"ok": False, "error": f"复制到 CS2 目录失败：{e}"}
+            return {"ok": True, "mode": "csgo", "cmd": f"playdemo {nm}",
+                    "path": dst, "copied": copied}
+    return {"ok": True, "mode": "abs", "cmd": f'playdemo "{src}"', "path": src,
+            "note": "没找到 CS2 安装目录，用的是绝对路径；CS2 若不认，把文件放进 game\\csgo 再 playdemo 文件名"}
 
 
 def api_analyze(names: list[str], force: bool = False):
@@ -738,6 +841,8 @@ class Handler(BaseHTTPRequestHandler):
                         return self._send(*_json(json.load(_f)))
                 except Exception:
                     return self._send(*_json({"state": "idle"}))
+            if path == "/api/http_pull_progress":
+                return self._send(*_json(_http_pull))
             if path == "/api/download_progress":
                 # 下载进度：清单里有 N 场，CS2 下完的会落到 replays 目录。
                 # 工具本身不下载（下载是 CS2 干的），只能数落盘的文件。
@@ -1034,6 +1139,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(*_json({"ok": True, "need_restart": need_restart,
                                           "notes": _notes,
                                           "paths": {"demos": DEMO_DIR, "data": DATA_DIR}}))
+            if u.path == "/api/playdemo":
+                # 生成 playdemo 命令用的；顺带把 demo 放进 CS2 的 csgo 目录
+                return self._send(*_json(api_playdemo(payload.get("name"))))
+            if u.path == "/api/http_pull":
+                # 直接走 Valve 的 demo CDN 下载（绕开 CS2 客户端）。
+                # 传 codes 就下一批，不传就用上次「拉新比赛」记下的清单。
+                _codes = payload.get("codes")
+                return self._send(*_json(api_http_pull(_codes)))
             if u.path == "/api/pull_new":
                 # 配置不全就把缺的字段名回给前端，前端据此打开说明页
                 cfg = S.load() or {}
