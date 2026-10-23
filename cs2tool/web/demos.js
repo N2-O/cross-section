@@ -193,19 +193,16 @@ function renderGames() {
     };
   });
 
-  /* 控制台看回放：把 demo 送进 CS2 的 csgo 目录，复制 playdemo 命令 */
+  /* 控制台看回放：生成 playdemo 绝对路径命令并复制 */
   $$('#gameTable button[data-play]').forEach(b => {
     b.onclick = async () => {
       const nm = b.dataset.play;
-      hint('准备 demo（可能要把文件复制到 CS2 目录，大文件要几秒）…');
       const r = await post('/api/playdemo', { name: nm });
       if (!r.ok) { hint(r.error || '失败', false); return; }
       let copied = true;
       try { await navigator.clipboard.writeText(r.cmd); }
       catch (e) { copied = false; prompt('复制这行命令，粘进 CS2 控制台：', r.cmd); }
-      const extra = r.mode === 'abs' ? '　（没找到 CS2 目录，用的是绝对路径）' : '';
-      hint(copied ? `已复制：${r.cmd}　粘进 CS2 控制台回车${extra}`
-                  : `命令：${r.cmd}${extra}`, true);
+      hint(copied ? `已复制：${r.cmd}` : `命令：${r.cmd}`, true);
     };
   });
 

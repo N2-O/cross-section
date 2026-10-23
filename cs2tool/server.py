@@ -615,47 +615,14 @@ def _http_pull_worker(codes):
 
 
 def api_playdemo(name: str):
-    """生成 CS2 控制台的 playdemo 命令。
-
-    playdemo 默认只在 CS2 的 game/csgo 目录里找文件，所以先把 demo 复制过去
-    （同名同大小就跳过，避免每次拷 200 MB）。找不到 CS2 目录时退回绝对路径写法，
-    能不能用取决于 CS2 版本，所以在返回值里标 mode，前端会提示。
-    """
+    """生成 CS2 控制台的 playdemo 命令（绝对路径，文件不用挪位置）。"""
     nm = os.path.basename(str(name or "").strip())
     if not nm:
         return {"ok": False, "error": "缺少文件名"}
     src = os.path.join(DEMO_DIR, nm)
     if not os.path.isfile(src):
         return {"ok": False, "error": f"找不到文件：{src}"}
-
-    st = S.load() or {}
-    cs2 = st.get("cs2_dir") or ""
-    if not cs2:
-        try:
-            cs2 = (_detect_cs2() or {}).get("cs2_dir") or ""
-        except Exception:
-            cs2 = ""
-    if cs2:
-        csgo = os.path.join(cs2, "game", "csgo")
-        if os.path.isdir(csgo):
-            dst = os.path.join(csgo, nm)
-            copied = False
-            need = True
-            try:
-                if os.path.isfile(dst) and os.path.getsize(dst) == os.path.getsize(src):
-                    need = False
-            except OSError:
-                need = True
-            if need:
-                try:
-                    shutil.copy2(src, dst)
-                    copied = True
-                except OSError as e:
-                    return {"ok": False, "error": f"复制到 CS2 目录失败：{e}"}
-            return {"ok": True, "mode": "csgo", "cmd": f"playdemo {nm}",
-                    "path": dst, "copied": copied}
-    return {"ok": True, "mode": "abs", "cmd": f'playdemo "{src}"', "path": src,
-            "note": "没找到 CS2 安装目录，用的是绝对路径；CS2 若不认，把文件放进 game\\csgo 再 playdemo 文件名"}
+    return {"ok": True, "cmd": f'playdemo "{src}"', "path": src}
 
 
 def api_analyze(names: list[str], force: bool = False):
