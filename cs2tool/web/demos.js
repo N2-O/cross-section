@@ -123,7 +123,11 @@ function renderGames() {
      结果列直接写「无你」，不然会显示一个跟我无关的胜负。 */
   const noMe = r => r.match_id && r.me_in === 0;
   const resOf = r => {
-    if (noMe(r)) return '<span class="m" title="这场 demo 里没有你的 steamid：可能不是你打的，或你中途才进场">无你</span>';
+    if (noMe(r)) {
+      const tw = r.t_wins ?? 0, cw = r.ct_wins ?? 0;
+      const who = tw === cw ? '平' : (tw > cw ? 'T 方胜' : 'CT 方胜');
+      return `<span class="m" title="这场 demo 里没有你的 steamid（可能不是你打的，或你中途才进场）。本场 T ${tw} : CT ${cw}，${who}">无你</span>`;
+    }
     if (!hasRes(r)) return '—';
     const w = r.wins || 0, t = r.rounds;
     if (w * 2 > t) return '<span class="w">胜</span>';
@@ -131,10 +135,14 @@ function renderGames() {
     return '<span class="l">负</span>';
   };
   const scoreOf = r => {
-    if (noMe(r)) return '—';
     if (!hasRes(r)) return '—';
     const w = r.wins || 0, t = r.rounds;
     const ot = t > 24 ? '<span class="ot">加时</span>' : '';
+    if (noMe(r)) {
+      /* 没我的场：给客观比分——T 方回合 : CT 方回合（阵营视角，不冒充我的战绩） */
+      const tw = r.t_wins ?? 0, cw = r.ct_wins ?? 0;
+      return `<span class="m" title="这场 demo 里没有你的 steamid。比分是两边阵营赢下的回合数：T ${tw} : CT ${cw}">${tw}:${cw}</span>${ot}`;
+    }
     return `${w}:${t - w}${ot}`;
   };
 
