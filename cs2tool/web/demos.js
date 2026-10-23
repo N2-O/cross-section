@@ -16,7 +16,14 @@ const MAP_CN = {
 };
 const mapCn = m => MAP_CN[m] || String(m || '').replace(/^de_/, '');
 
-async function api(path, opt) { return await (await fetch(path, opt)).json(); }
+async function api(path, opt) {
+  const r = await fetch(path, opt);
+  try { return await r.json(); }
+  catch (e) {
+    // 后端是老版本时接口不存在，404 返回的是 HTML，.json() 会炸。
+    return { ok: false, http: r.status, error: `HTTP ${r.status} —— 后端可能还是旧版本，重启一下程序` };
+  }
+}
 async function post(url, body) {
   return await api(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body || {}) });
@@ -47,6 +54,16 @@ async function load() {
   if (!_scanned) {
     _scanned = true;
     try { await post('/api/scan', {}); } catch (e) { /* 扫描失败不影响列表 */ }
+    // 同时确认后端是不是新版（覆盖代码后忘了重启，是这里最常见的坑）
+    const probe = await api('/api/http_pull_progress');
+    if (!probe || !('running' in probe)) {
+      const box = $('#pullDiag');
+      if (box) {
+        box.hidden = false;
+        box.innerHTML = '<div class="vd bad">后端还是旧版本（没有下载接口）' +
+          '——把程序关掉重新启动一次，光刷新页面不生效。</div>';
+      }
+    }
   }
   S = await api('/api/state');
   renderPlayers();
@@ -78,8 +95,12 @@ async function rPullLast() {
     el.textContent = `上次检查 ${t}：没有新比赛（已是最新的）`;
     el.style.color = '';
   } else {
-    // msg 已经是人话（「已下载 4 场」/「新增 4 场」），直接用它
-    el.textContent = `上次检查 ${t}：${r.msg || '新增 ' + r.added + ' 场'}`;
+    // 旧记录（升级前写的）只有 added/bat，没有 failed —— 一律按「新增 N 场」说，
+    // 不再把 msg 里过时的「已生成 cs2_new_download.bat」显示出来
+    const failed = Number(r.failed || 0);
+    el.textContent = ('failed' in r)
+      ? `上次检查 ${t}：已下载 ${r.added} 场` + (failed ? `，失败 ${failed} 场` : '')
+      : `上次检查 ${t}：新增 ${r.added} 场`;
     el.style.color = 'var(--ok)';
   }
 }
@@ -305,6 +326,14 @@ $('#btnPullNew').onclick = async () => {
     return;
   }
   if (!pv.count) {
+    // 没有新比赛：但可能还留着升级前没下成的清单，先试那批（codes 存在 pull_last 里）
+    const hp2 = await post('/api/http_pull', {});
+    if (hp2.ok) {
+      hint(`没有新比赛，但有 ${hp2.total} 场待下载，开始下载…`);
+      showPull();
+      httpPullWatch();
+      return;
+    }
     hint('没有新比赛（已是最新的）', true);
     return;
   }

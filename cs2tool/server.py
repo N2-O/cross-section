@@ -566,11 +566,16 @@ def api_http_pull(codes=None):
     if _http_pull["running"]:
         return {"ok": False, "error": "已有下载任务在进行"}
     if not codes:
-        try:
-            with open(os.path.join(DATA_DIR, "pull_pending.json"), encoding="utf-8") as f:
-                codes = (json.load(f) or {}).get("codes") or []
-        except Exception:
-            codes = []
+        # 待下载清单：优先 pull_pending，其次 pull_last（老版本只写过 pull_last，
+        # 里面同样带 codes —— 这样升级前没下成的那批还能救回来，不用重拉）
+        for fn in ("pull_pending.json", "pull_last.json"):
+            try:
+                with open(os.path.join(DATA_DIR, fn), encoding="utf-8") as f:
+                    codes = (json.load(f) or {}).get("codes") or []
+            except Exception:
+                codes = []
+            if codes:
+                break
     if not codes:
         return {"ok": False, "error": "没有待下载的清单——先点「从 Steam 拉新比赛」"}
     try:
