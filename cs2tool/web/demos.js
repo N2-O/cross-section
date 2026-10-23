@@ -347,22 +347,40 @@ function hidePull() {
   clearTimeout(_dlTimer);
   clearTimeout(_hpTimer);
   const e = $('#pullBar');
-  if (e) { e.hidden = true; const f = $('#pullFill'); if (f) f.style.width = '0'; }
+  if (e) {
+    e.hidden = true;
+    ['pullFill', 'pullFillOne'].forEach(id => {
+      const f = document.getElementById(id);
+      if (f) f.style.width = '0';
+    });
+    const a = $('#pullFillTxt'), b = $('#pullFillOneTxt');
+    if (a) a.textContent = '';
+    if (b) b.textContent = '';
+  }
 }
 
 /* ===== HTTP 直下进度（工具自己下，不经过 CS2） ===== */
 async function httpPullWatch() {
   clearTimeout(_hpTimer);
-  const msg = $('#pullMsg'), fill = $('#pullFill');
+  const msg = $('#pullMsg');
   if (!msg) return;
   let p = null;
   try { p = await api('/api/http_pull_progress'); } catch (e) { return; }
   const total = Number(p.total || 0), done = Number(p.done || 0);
   const mb = n => (Number(n || 0) / 1048576).toFixed(1);
-  if (fill && total) fill.style.width = `${Math.round(done / total * 100)}%`;
-  const cur = p.bytes_total ? ` · 当前 ${mb(p.bytes)}/${mb(p.bytes_total)} MB` : '';
+
+  // 上条：总场次
+  const fAll = $('#pullFill'), tAll = $('#pullFillTxt');
+  if (fAll && total) fAll.style.width = `${Math.round(done / total * 100)}%`;
+  if (tAll) tAll.textContent = total ? `${done}/${total} 场` : '';
+  // 下条：当前这一场的字节进度
+  const fOne = $('#pullFillOne'), tOne = $('#pullFillOneTxt');
+  const bt = Number(p.bytes_total || 0), bb = Number(p.bytes || 0);
+  if (fOne) fOne.style.width = `${bt ? Math.round(bb / bt * 100) : 0}%`;
+  if (tOne) tOne.textContent = bt ? `${mb(bb)}/${mb(bt)} MB` : (bb ? `${mb(bb)} MB` : '—');
+
   if (p.running) {
-    msg.textContent = `下载中 ${done}/${total}${cur}`;
+    msg.textContent = `正在下载第 ${Math.min(done + 1, total)} 场${p.current ? '：' + p.current : ''}`;
     _hpTimer = setTimeout(httpPullWatch, 1000);
     return;
   }
@@ -396,6 +414,10 @@ async function downloadWatch() {
     return;
   }
   const total = Number(r.total || 0), done = Number(r.done || 0);
+  // CS2 下载这条只有总进度，没有单场字节数 → 第二条清零
+  const fOne = $('#pullFillOne'), tOne = $('#pullFillOneTxt');
+  if (fOne) fOne.style.width = '0';
+  if (tOne) tOne.textContent = '—';
   if (!total) {
     msg.textContent = '清单已生成，双击工具目录里的 cs2_new_download.bat 让 CS2 开始下载';
     return;

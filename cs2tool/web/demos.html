@@ -63,6 +63,16 @@
 #foot .fdis span{display:block}
 #foot .fdis span+span{margin-top:2px}
 #foot .fdis code{font-size: 12px;background:none;padding:0}
+/* 双进度条：靠左窄标签 + 细条 + 右侧读数，不用外框 */
+.prow{display:grid;grid-template-columns:44px 1fr 92px;align-items:center;gap:10px;
+  margin-bottom:6px}
+.prow .pk{font-size: 12px;color:var(--dim)}
+.prow .pv{font-size: 12px;color:var(--dim);text-align:right;
+  font-variant-numeric:tabular-nums}
+.pbar{height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden}
+.pbar.thin{height:2px}
+.pbar i{display:block;height:100%;width:0;background:var(--tint);
+  transition:width .3s ease}
 .tb{width:100%;border-collapse:collapse;font-size: 13px}
 .tb th{text-align:left;font-weight:500;color:var(--dim);font-size: 12px;
   padding:7px 9px;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -109,10 +119,18 @@
       <!-- 拉取配置自检结果：点「🔍 检查拉取配置」或拉取失败时自动出现 -->
       <div id="pullDiag" hidden></div>
       <div id="pullBar" hidden style="margin-top:10px">
-        <div style="height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden">
-          <i id="pullFill" style="display:block;height:100%;width:0;background:var(--tint);transition:width .35s ease"></i>
+        <!-- 双进度：上面是总场次，下面是当前这一场的字节进度 -->
+        <div class="prow">
+          <span class="pk">总场次</span>
+          <div class="pbar"><i id="pullFill"></i></div>
+          <span class="pv" id="pullFillTxt"></span>
         </div>
-        <div class="muted" id="pullMsg" style="font-size: 12px;margin-top:6px"></div>
+        <div class="prow">
+          <span class="pk">本场</span>
+          <div class="pbar thin"><i id="pullFillOne"></i></div>
+          <span class="pv" id="pullFillOneTxt"></span>
+        </div>
+        <div class="muted" id="pullMsg" style="font-size: 12px;margin-top:7px"></div>
       </div>
       <div class="muted" id="pullLast" style="font-size: 12px;margin-top:10px"></div>
     </div></div>
