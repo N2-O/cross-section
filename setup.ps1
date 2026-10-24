@@ -127,19 +127,27 @@ $Wheels = [ordered]@{
     'numpy-2.5.4-cp312-cp312-win_amd64.whl'            = 'numpy'
     'pyarrow-26.0.0-cp312-cp312-win_amd64.whl'         = 'pyarrow'
     'tqdm-4.70.1-py3-none-any.whl'                     = 'tqdm'
+    # pandas 自己的必需依赖：少 dateutil 会直接 ImportError，少 tzdata 在 Windows 上
+    # 时区相关操作会炸。这两条连同 six 一起，之前都漏了。
+    'python_dateutil-2.9.0.post0-py2.py3-none-any.whl' = 'dateutil'
+    'six-1.17.0-py2.py3-none-any.whl'                  = 'six'
+    'tzdata-2026.5-py2.py3-none-any.whl'               = 'tzdata'
 }
 
+# 顺序按实测带宽排（2026-10 在本机测 pandas 前 3 MB）：
+#   腾讯 27 MB/s · 华为 15 MB/s · 阿里 0.33 MB/s · 官方 0.02 MB/s · 清华（部分网络 404）
+# 阿里排在前面时，120 MB 的装配要拖好几分钟；换腾讯/华为打头通常十几秒。
 $SimpleMirrors = @(
-    'https://pypi.tuna.tsinghua.edu.cn/simple',
-    'https://mirrors.aliyun.com/pypi/simple',
     'https://mirrors.cloud.tencent.com/pypi/simple',
     'https://repo.huaweicloud.com/repository/pypi/simple',
+    'https://pypi.tuna.tsinghua.edu.cn/simple',
+    'https://mirrors.aliyun.com/pypi/simple',
     'https://pypi.org/simple'
 )
 
 # 在 simple 索引页里按**确切文件名**找下载链接；包名取文件名第一个 '-' 之前那段
 function Pick-WheelUrl($whl, $mirror) {
-    $pkg = ($whl -split '-')[0]
+    $pkg = ($whl -split '-')[0] -replace '_', '-'   # PyPI 规范名用连字符（python_dateutil → python-dateutil）
     $url = "$mirror/$pkg/"
     $html = $null
     # 索引页也用双方法：部分镜像对 WebClient 的默认 UA 直接 403
@@ -196,7 +204,7 @@ function Install-Wheels {
             $rel = Pick-WheelUrl $whl $m
             if (-not $rel) { continue }
             # href 是相对索引页的路径（形如 ../../packages/xx/yy/xxx.whl），补成绝对地址
-            $pkg = ($whl -split '-')[0]
+            $pkg = ($whl -split '-')[0] -replace '_', '-'   # PyPI 规范名用连字符（python_dateutil → python-dateutil）
             $abs = ([Uri]::new([Uri]"$m/$pkg/", $rel)).AbsoluteUri
             $dest = Join-Path $TmpDir $whl
             Say (("  从 {0} 下载" -f ([Uri]$m).Host)) 'DarkGray'
@@ -237,12 +245,12 @@ if ($bad.Count -gt 0) {
 # 自检：能 import 解析链才算真装好（demoparser2 是回放页必需的，漏了就一起报出来）
 Step '自检'
 $py = Join-Path $PyDir 'python.exe'
-$chk = & $py -c "import awpy, polars, demoparser2; print('ok', awpy.__version__ if hasattr(awpy,'__version__') else '')" 2>&1
+$chk = & $py -c "import awpy, polars, demoparser2, pandas; print('ok', awpy.__version__ if hasattr(awpy,'__version__') else '')" 2>&1
 if ($LASTEXITCODE -ne 0) {
     Say ('!! 装完了但 import 失败：' + $chk) 'Red'
     exit 1
 }
-Say ('  import awpy / polars / demoparser2 成功：' + $chk) 'Green'
+Say ('  import awpy / polars / demoparser2 / pandas 成功：' + $chk) 'Green'
 
 Remove-Item $TmpDir -Recurse -Force -ErrorAction SilentlyContinue
 Say ''

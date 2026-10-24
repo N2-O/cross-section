@@ -7,6 +7,9 @@
 - 删 `app.js` 里 `/api/recompute` 的死绑定（按钮和后端都不存在）
 - 发版包不再带 `RELEASE_NOTES_*.md` / `CHANGELOG.md` / `requirements.txt` / `.gitignore`
 - 修 `check.bat` 指向已废弃的 `.venv`；修 `更新说明.txt` 里的 OWNER 占位符
+- 首次装配补 `python-dateutil` / `six` / `tzdata`（pandas 的必需依赖，漏装会导致 `ImportError: Unable to import required dependency dateutil`）
+- 镜像顺序按实测带宽重排：腾讯 27 MB/s → 华为 15 MB/s → 清华 → 阿里 0.33 MB/s → 官方；原来阿里排第二，每个包都先落它，120 MB 要拖好几分钟
+- 包名取索引页时统一转成 PyPI 规范名（`python_dateutil` → `python-dateutil`），否则腾讯等严格镜像会 404
 
 ## v6.2.3 — 2026-10-24
 - 「地图数据」和「图池」合并成一张「地图」表，挪到页面最下面；去掉场次数字后面的小条
