@@ -294,7 +294,7 @@ $('#btnPull').onclick = async () => {
   load();
 };
 // 从 Steam 拉新比赛：读设置里的 key/auth/steamid/start_code，
-// 跑 cs2_pull_new.py 生成 steam:// 批量下载 bat。
+// 旧分享码链已移除：现在只有 AutoPull（GC 直取地址）和本地「从 CS2 拉取」两条路。
 // 配置不全时后端返回 missing 列表，这里提示去哪儿填。
 $('#btnPullNew').onclick = async () => {
   const b = $('#btnPullNew');
@@ -350,11 +350,9 @@ $('#btnPullNew').onclick = async () => {
   }
 };
 
-let _dlTimer = null;                 // CS2 下载监视的定时器
 let _hpTimer = null;                 // HTTP 直下进度的定时器（hidePull 里要清，所以先声明）
 function showPull() { const e = $('#pullBar'); if (e) e.hidden = false; }
 function hidePull() {
-  clearTimeout(_dlTimer);
   clearTimeout(_hpTimer);
   const e = $('#pullBar');
   if (e) {
@@ -415,89 +413,6 @@ async function httpPullWatch() {
 /* ===== 下载进度 =====
    工具本身不下载 demo —— 下载是 CS2 干的（下载清单 cs2_new_download.bat 会逐个唤起）。
    能观测的只有「replays 目录里新落盘了几个 .dem」，所以进度就是 done/total。 */
-async function downloadWatch() {
-  const bar = $('#pullBar'), msg = $('#pullMsg'), fill = $('#pullFill');
-  if (!bar || !msg) return;
-  bar.hidden = false;
-  let r = null;
-  try { r = await api('/api/download_progress'); } catch (e) { return; }
-  if (!r || !r.ok) {
-    msg.textContent = (r && r.error) || '查不到下载进度';
-    return;
-  }
-  const total = Number(r.total || 0), done = Number(r.done || 0);
-  // CS2 下载这条只有总进度，没有单场字节数 → 第二条清零
-  const fOne = $('#pullFillOne'), tOne = $('#pullFillOneTxt');
-  if (fOne) fOne.style.width = '0';
-  if (tOne) tOne.textContent = '—';
-  if (!total) {
-    msg.textContent = '清单已生成，双击工具目录里的 cs2_new_download.bat 让 CS2 开始下载';
-    return;
-  }
-  if (fill) fill.style.width = `${Math.min(100, done / total * 100)}%`;
-  if (done >= total) {
-    msg.textContent = `${done}/${total} 场已下载完成 · 点「⇩ 从 CS2 拉取」把它导进 demos`;
-    hint('下载完成：点「⇩ 从 CS2 拉取」，再点「分析未处理」', true);
-    return;                                  // 到齐了就停，别一直轮询
-  }
-  msg.textContent = done
-    ? `CS2 正在下载：已完成 ${done}/${total} 场`
-    : `等待 CS2 开始下载（0/${total}）· 双击 cs2_new_download.bat，脚本会自动一场场触发`;
-  clearTimeout(_dlTimer);
-  _dlTimer = setTimeout(downloadWatch, 5000);
-}
-
-async function pollPull() {
-  clearTimeout(_dlTimer);
-  let p = {};
-  try { p = await api('/api/pull_progress'); } catch (e) { p = { state: 'error' }; }
-  const fill = $('#pullFill'), msg = $('#pullMsg');
-  if (!fill || !msg) return;
-  if (p.state === 'running') {
-    const n = p.done || 0;
-    // 查询阶段不知道总场数（Steam 只能一个个往后问），用推进式进度 + 实时场数
-    fill.style.width = `${Math.min(90, 10 + n * 6)}%`;
-    msg.textContent = `已查询 ${n} 场${p.current ? ' · ' + p.current : ''}`;
-    setTimeout(pollPull, 700);
-    return;
-  }
-  fill.style.width = '100%';
-  if (p.state === 'done') {
-    msg.textContent = p.msg || '完成';
-    hint(p.msg || '完成', true);
-    load();
-    downloadWatch();          // 清单生成了，接着盯「CS2 下载到哪了」
-  } else if (p.state === 'error') {
-    msg.textContent = '失败：' + (p.error || '未知原因');
-    hint('拉取失败：' + (p.error || ''), false);
-    checkPull();                 // 失败就地自检，省得再点一次
-    setTimeout(hidePull, 5000);
-  } else {
-    hidePull();
-  }
-}
-/* ===== 拉取失败时就地自检，结论直接摊在下面 ===== */
-async function checkPull() {
-  const box = $('#pullDiag');
-  if (!box) return;
-  box.hidden = false;
-  box.innerHTML = '<div class="inf">正在检测配置（会真的请求一次 Steam，十几秒）…</div>';
-  let r = null;
-  try {
-    r = await post('/api/check_pull', {});
-  } catch (e) {
-    box.innerHTML = `<div class="vd bad">自检请求失败：${esc(String(e))}</div>`;
-    return;
-  }
-  const rows = (r.steps || []).map(s => {
-    const cls = s.ok === true ? 'ok' : (s.ok === false ? 'bad' : 'inf');
-    const mark = s.ok === true ? '✓' : (s.ok === false ? '✗' : '·');
-    return `<i class="${cls}">${mark}</i><span><span class="nm">${esc(s.name || '')}</span>` +
-           `${esc(s.detail || '')}</span>`;
-  }).join('');
-  box.innerHTML = `<div class="dg">${rows || '<i class="inf">·</i><span class="inf">没有返回检查项</span>'}</div>
-    <div class="vd${r.ok ? '' : ' bad'}">${esc(r.verdict || '')}</div>`;
-}
 
 $('#btnScan').onclick = async () => {
   hint('扫描中…');

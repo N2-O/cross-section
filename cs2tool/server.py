@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
+import re
 import shutil
 import socket
 import sqlite3
@@ -666,8 +667,8 @@ def _http_pull_worker(codes):
                            "ok": _failc == 0 and _okc > 0,
                            "status": "ok" if _okc and not _failc else "error",
                            "added": _okc, "failed": _failc, "msg": _msg,
-                           # 失败也要留着 codes —— 重试时靠它，别让 start_code 推进后无法补下
-                           "codes": list(codes),
+                           # 失败也留着清单 —— 重试时靠它，别让已经推进的起点无法补下
+                           "urls": list(codes),
                            "errors": (_http_pull.get("errors") or [])[:3]},
                           f, ensure_ascii=False, indent=2)
         except OSError:
@@ -860,51 +861,8 @@ class Handler(BaseHTTPRequestHandler):
                                           "demos": _out}))
             if path == "/api/pull":
                 return self._send(*_json(api_pull()))
-            if path == "/api/pull_progress":
-                # 轮询用：拉取进度（stage/done/total/current/msg）
-                _pf = os.path.join(DATA_DIR, "pull_progress.json")
-                try:
-                    with open(_pf, encoding="utf-8") as _f:
-                        return self._send(*_json(json.load(_f)))
-                except Exception:
-                    return self._send(*_json({"state": "idle"}))
             if path == "/api/http_pull_progress":
                 return self._send(*_json(_http_pull))
-            if path == "/api/download_progress":
-                # 下载进度：清单里有 N 场，CS2 下完的会落到 replays 目录。
-                # 工具本身不下载（下载是 CS2 干的），只能数落盘的文件。
-                _pend = os.path.join(DATA_DIR, "pull_pending.json")
-                try:
-                    with open(_pend, encoding="utf-8") as _f:
-                        _pd = json.load(_f)
-                except Exception:
-                    _pd = {}
-                _total = int(_pd.get("total") or 0)
-                _t0 = str(_pd.get("t") or "")
-                _src = _replays_dir()
-                if not _src:
-                    return self._send(*_json({"ok": False, "total": _total, "done": 0,
-                                              "error": "找不到 CS2 的 replays 目录"}))
-                _got = []
-                try:
-                    for _fn in os.listdir(_src):
-                        if not _fn.lower().endswith(".dem"):
-                            continue
-                        _p = os.path.join(_src, _fn)
-                        try:
-                            _s = os.stat(_p)
-                        except OSError:
-                            continue
-                        _mt = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(_s.st_mtime))
-                        if _t0 and _mt < _t0:
-                            continue          # 只数这次清单之后下载的
-                        _got.append({"name": _fn, "size": _s.st_size, "mtime": _mt})
-                except OSError as e:
-                    return self._send(*_json({"ok": False, "total": _total, "done": 0,
-                                              "error": f"读不了 replays 目录：{e}"}))
-                _got.sort(key=lambda x: x["mtime"])
-                return self._send(*_json({"ok": True, "dir": _src, "total": _total,
-                                          "done": len(_got), "files": _got[-8:]}))
             if path == "/api/pull_result":
                 # 上次拉取结果（自动检查或手动跑过之后写的）
                 _p = os.path.join(DATA_DIR, "pull_last.json")
@@ -1122,21 +1080,21 @@ class Handler(BaseHTTPRequestHandler):
                 elif not ncs2 and (S.load() or {}).get("cs2_dir"):
                     upd["cs2_dir"] = ""
                     need_restart = True
-                # Steam 拉取相关配置（只存盘，不在这里联网；脚本读同一个 settings.json）
-                # 允许直接粘链接：Steam 主页 URL、比赛历史链接、整段分享文本都行——
-                # 统一在这里提取成要的值再存，别让人为了一个 steamid 去数位数。
+                # Steam 相关只剩两项：steamid（识别「我」）、replays_dir（从 CS2 目录拷 demo）
+                # 允许直接粘链接：steamid 从主页 URL 里提取 17 位数字，省得人数位数
                 _notes = []
-                _raw = {k: payload.get(k) for k in
-                        ("steam_api_key", "steam_auth_code", "steamid",
-                         "start_code", "replays_dir") if k in payload}
-                if _raw:
-                    try:
-                        import check_pull as _cp
-                        _fixed, _notes = _cp.normalize_fields(_raw)
-                    except Exception:
-                        _fixed = {k: str(v or "").strip().strip('"') for k, v in _raw.items()}
-                    for k, v in _fixed.items():
-                        upd[k] = v
+                _raw = {k: payload.get(k) for k in ("steamid", "replays_dir") if k in payload}
+                for _k, _v in _raw.items():
+                    _val = str(_v or "").strip().strip('"')
+                    if _k == "steamid":
+                        _m = re.search(r"\d{17}", _val)
+                        if _m:
+                            if _m.group(0) != _val:
+                                _notes.append("steamid：已从输入里取出 17 位数字")
+                            _val = _m.group(0)
+                        elif _val:
+                            _notes.append("steamid：没找到 17 位数字")
+                    upd[_k] = _val
                 if "auto_pull_hours" in payload:
                     try:
                         upd["auto_pull_hours"] = max(0.0, float(payload.get("auto_pull_hours") or 0))
@@ -1177,83 +1135,6 @@ class Handler(BaseHTTPRequestHandler):
                 # urls = 从比赛历史页复制来的链接；codes = 上次清单（只能定位比赛，拼不出地址）
                 _items = payload.get("urls") or payload.get("codes")
                 return self._send(*_json(api_http_pull(_items)))
-            if u.path == "/api/pull_new":
-                # 配置不全就把缺的字段名回给前端，前端据此打开说明页
-                cfg = S.load() or {}
-                need = [k for k in ("steam_api_key", "steam_auth_code", "steamid", "start_code")
-                        if not str(cfg.get(k) or "").strip()]
-                if need:
-                    return self._send(*_json({"ok": False, "need_setup": True, "missing": need}))
-                script = os.path.normpath(os.path.join(HERE, "cs2_pull_new.py"))
-                if not os.path.isfile(script):
-                    # 兼容源码目录：脚本在 cs2tool 的上一级
-                    alt = os.path.normpath(os.path.join(HERE, "..", "cs2_pull_new.py"))
-                    script = alt if os.path.isfile(alt) else script
-                if not os.path.isfile(script):
-                    return self._send(*_json({
-                        "ok": False, "need_setup": True, "missing": ["cs2_pull_new.py"],
-                        "error": "找不到拉取脚本 cs2_pull_new.py"}))
-                try:
-                    # 后台防断：脱离父进程的进程组/会话，网页关掉、服务重启都不影响它跑完。
-                    # 输出落 data/pull.log，出问题有据可查。
-                    _kw = {}
-                    if os.name == "nt":
-                        _kw["creationflags"] = 0x00000008 | 0x00000200  # DETACHED|NEW_GROUP
-                    else:
-                        _kw["start_new_session"] = True
-                    _logf = open(os.path.join(DATA_DIR, "pull.log"), "a", encoding="utf-8")
-                    subprocess.Popen([sys.executable, script, "--data", DATA_DIR],
-                                     cwd=os.path.dirname(script),
-                                     stdout=_logf, stderr=subprocess.STDOUT,
-                                     **_kw)
-                except Exception as e:
-                    return self._send(*_json({"ok": False, "error": f"启动失败: {e}"}))
-                return self._send(*_json({
-                    "ok": True, "started": True,
-                    "msg": "已开始拉取新比赛，进度见下方进度条"}))
-            if u.path == "/api/pull_preview":
-                # 先报场数：只查不下载、不写 bat、不推进 start_code
-                cfg = S.load() or {}
-                need = [k for k in ("steam_api_key", "steam_auth_code", "steamid", "start_code")
-                        if not str(cfg.get(k) or "").strip()]
-                if need:
-                    return self._send(*_json({"ok": False, "need_setup": True, "missing": need}))
-                script = os.path.normpath(os.path.join(HERE, "cs2_pull_new.py"))
-                if not os.path.isfile(script):
-                    alt = os.path.normpath(os.path.join(HERE, "..", "cs2_pull_new.py"))
-                    script = alt if os.path.isfile(alt) else script
-                if not os.path.isfile(script):
-                    return self._send(*_json({"ok": False, "error": "找不到 cs2_pull_new.py"}))
-                try:
-                    _r = subprocess.run(
-                        [sys.executable, script, "--dry-run", "--limit", "30",
-                         "--data", DATA_DIR],
-                        cwd=os.path.dirname(script), capture_output=True,
-                        text=True, timeout=150)
-                except subprocess.TimeoutExpired:
-                    return self._send(*_json({"ok": False, "status": "error",
-                                              "error": "查询超时：脚本 150 秒没回来（网络太慢）"}))
-                _pf = os.path.join(DATA_DIR, "pull_preview.json")
-                try:
-                    with open(_pf, encoding="utf-8") as _f:
-                        _pv = json.load(_f)
-                except Exception:
-                    return self._send(*_json({"ok": False, "status": "error",
-                                              "error": (_r.stderr or _r.stdout or "查询失败")[-300:]}))
-                # status: ok=有新比赛 / empty=一条都没新（正常）/ error=查询失败 /
-                # offline=连不上 Steam。后两个不能伪装成「没有新比赛」。
-                _pv["ok"] = _pv.get("status") not in ("error", "offline")
-                return self._send(*_json(_pv))
-            if u.path == "/api/check_pull":
-                # 拉取配置自检：界面「🔍 检查拉取配置」按钮、以及拉取失败时自动调。
-                # 懒加载——旧包只覆盖了部分文件时也不至于让整个服务起不来。
-                try:
-                    import check_pull as _cp
-                    return self._send(*_json(_cp.run_check(DATA_DIR)))
-                except Exception as e:
-                    return self._send(*_json({
-                        "ok": False, "steps": [], "player": None,
-                        "verdict": f"自检脚本本身出错：{type(e).__name__}: {e}"}))
             if u.path == "/api/set_excluded":
                 # 标记/取消标记「这局不算数」：投降、摆烂、半路不打了。
                 # 数据留在库里，只是默认不参与平均/走势/能力画像。
