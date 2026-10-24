@@ -361,29 +361,17 @@ def _release_tag_from_location(loc):
     return (tag, page) if tag else ("", RELEASES_URL)
 
 
-def api_update_check():
-    """问 GitHub 要最新 Release，判断有没有新版本。
+_update_check_state = {"running": False}
+_update_check_lock = threading.Lock()
 
-    - 请求 https://github.com/<repo>/releases/latest，只看 302 的 Location，不跟跳转
-    - 缓存 24 小时（DATA_DIR/update_check.json），命中直接返回并带 cached
-    - 只发一个 GET：不带 cookie、不带参数、不带任何本机信息
-    - 失败一律吞掉返回 ok:false，绝不 500、绝不 traceback；失败不写缓存
+
+def _update_check_network():
+    """真去问一次 GitHub（301/302 的 Location 里带 tag），成功才写缓存。
+
+    失败一律吞掉：被墙、DNS、超时、404 都不抛，也不留痕。
     """
     now = int(time.time())
     cache_path = os.path.join(DATA_DIR, "update_check.json")
-    base = {"current": VERSION, "releases_url": RELEASES_URL}
-    try:
-        with open(cache_path, encoding="utf-8") as f:
-            c = json.load(f)
-        if (isinstance(c, dict) and c.get("ok") is not False
-                and now - int(c.get("checked_at") or 0) < UPDATE_TTL):
-            out = dict(c)
-            out.update({"ok": True, "cached": True,
-                        "current": VERSION, "releases_url": RELEASES_URL})
-            return out
-    except (OSError, ValueError, TypeError):
-        pass
-
     try:
         req = urllib.request.Request(RELEASES_LATEST, headers={
             "User-Agent": f"Cross-Section/{VERSION}",   # 不带 UA 会被 GitHub 403
@@ -395,14 +383,12 @@ def api_update_check():
                 status, loc = r.status, r.headers.get("Location") or ""
         except urllib.error.HTTPError as e:
             if e.code in (301, 302, 303, 307, 308):
-                status = e.code                 # 3xx 是正常路径，不是错误
+                status = e.code                 # 3xx 是正常路径
                 loc = (e.headers.get("Location") if e.headers else "") or ""
-            elif e.code == 404:                 # 仓库不存在（或还没公开）：不缓存
-                return {"ok": False, "error": "HTTP 404", **base}
             else:
-                raise
+                return                          # 404 / 其它：不缓存，静默
         if status not in (301, 302, 303, 307, 308):
-            raise RuntimeError("unexpected HTTP %s" % status)
+            return
         tag, page = _release_tag_from_location(loc)
         latest = tag.lstrip("vV") or VERSION     # 还没发版 → 就当自己是最新
         res = {"ok": True, "current": VERSION, "latest": latest,
@@ -414,10 +400,56 @@ def api_update_check():
                 json.dump(res, f, ensure_ascii=False)
         except OSError:
             pass
-        return res
-    except Exception as e:      # 网络 / DNS / 超时 / JSON / 404 全走这里
-        reason = _err_brief(e)
-        return {"ok": False, "error": reason, **base}
+    except Exception:
+        pass
+
+
+def _update_check_spawn():
+    """后台跑一次版本检查；已经有线程在跑就不重复起。"""
+    with _update_check_lock:
+        if _update_check_state["running"]:
+            return
+        _update_check_state["running"] = True
+
+    def _run():
+        try:
+            _update_check_network()
+        finally:
+            with _update_check_lock:
+                _update_check_state["running"] = False
+
+    threading.Thread(target=_run, daemon=True, name="update-check").start()
+
+
+def api_update_check():
+    """只读缓存，**绝不在这里联网**。
+
+    以前这一支在缓存过期时会现场去问 GitHub，被墙的机器每次打开页面都要白等
+    2 秒。现在改成：启动时后台查一次写缓存；页面请求只读文件——
+      有新鲜缓存  → 直接返回（cached）
+      缓存过期    → 返回旧值并标 stale，同时在后台刷新
+      完全没有    → 返回 pending，同时在后台查
+    页面因此永远不会为了「有没有新版本」卡住，下一次刷新就能看到徽章。
+    """
+    now = int(time.time())
+    cache_path = os.path.join(DATA_DIR, "update_check.json")
+    base = {"current": VERSION, "releases_url": RELEASES_URL}
+    try:
+        with open(cache_path, encoding="utf-8") as f:
+            c = json.load(f)
+        if not isinstance(c, dict) or c.get("ok") is False:
+            raise ValueError("bad cache")
+        fresh = now - int(c.get("checked_at") or 0) < UPDATE_TTL
+        out = dict(c)
+        out.update({"ok": True, "cached": True, "current": VERSION,
+                    "releases_url": RELEASES_URL})
+        if not fresh:
+            out["stale"] = True
+            _update_check_spawn()       # 过期：后台刷新，不影响这次返回
+        return out
+    except (OSError, ValueError, TypeError):
+        _update_check_spawn()           # 没缓存：后台去查，这次先回 pending
+        return {"ok": False, "pending": True, **base}
 
 
 def api_reset_all():
@@ -1310,6 +1342,8 @@ def main():
         traceback.print_exc()
 
     print(f"Cross-Section v{VERSION} 已启动: {url}")
+    # 版本检查挪到启动时后台跑：页面打开时只读缓存，不再等网络
+    _update_check_spawn()
     threading.Thread(target=_auto_pull_loop, daemon=True).start()
     print(f"demo 目录: {DEMO_DIR}")
     print(f"数据目录: {DATA_DIR}")
