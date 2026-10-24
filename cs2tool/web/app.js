@@ -1016,20 +1016,9 @@ function hint(msg, ok) {
 }
 
 /* 顶栏进度条：解析/重解析都走这里，文字 + 百分比 */
-function jobUI(j) {
-  const el = $('#job');
-  if (!el) return;
-  if (j && j.running) {
-    el.classList.add('on');
-    const pct = j.total ? Math.round(j.done / j.total * 100) : 0;
-    const nm = (j.current || '').replace(/\.dem$/i, '').slice(0, 24);
-    $('#jobtext').textContent =
-      `解析中 ${j.done}/${j.total} · ${pct}%${nm ? ' · ' + nm : ''}`;
-    $('#progbar').style.width = pct + '%';
-  } else {
-    el.classList.remove('on');
-  }
-}
+/* 顶栏那条进度换成全局进度带（jobs-bar.js + /api/jobs）。
+   这个函数保留成空实现，只为不动各处调用点。 */
+function jobUI() {}
 
 async function pollJob() {
   const t = setInterval(async () => {

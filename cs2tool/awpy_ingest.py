@@ -189,6 +189,7 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
     dmg = dem.damages
     stats = dem.stats
 
+    log("采样位置快照")
     # ---------- 一次性快照采样 ----------
     # 原来分 5 次调 dem.snapshots()，每次重扫一遍 demo，合计约 5 秒。
     # 所有需要的 tick 都来自 rounds / kills / shots，load 完就能算全，
@@ -280,6 +281,7 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
     # 冒充我方（旧逻辑继承脏值后 a_side 会退化成 T，胜负和比分全错）。
     my_steamid = _resolve_me(conn, pside.keys(), my_steamid)
 
+    log("写入回合与击杀")
     # ---------- 写 matches
     total_ticks = int(rounds["end_tick"].max())
     with conn:
@@ -376,6 +378,7 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
             hitgroup=d["hitgroup_name"] or ""))
     store2.insert_many(conn, "damage", drows)
 
+    log("统计射击与经济")
     # ---------- 扩展：射击 / 经济 / 目标 / 存活 / 保枪
     fire_map: dict[tuple, int] = {}
     hit_keys: set[tuple] = set()

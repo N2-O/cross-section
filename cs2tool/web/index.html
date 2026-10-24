@@ -249,11 +249,12 @@
     <span class="xb-alt" aria-hidden="true">Counter-Strike</span>
   </span> <span id="ver" style="font-size: 12px;font-weight:500;color:var(--dim)"></span></h1>
   <span style="flex:1"></span>
-  <span id="job"><span id="jobtext">解析中…</span><span class="prog"><i id="progbar"></i></span></span>
   <select id="player" title="选择「我」是谁"></select>
   <button id="btnExport" title="导出单份 CSV：注释头里写着给 AI 的指令与字段口径，后面是汇总和逐场明细 —— 直接丢给 AI 就能分析">导出</button>
   <button id="btnSettings">⚙ 设置</button>
 </div>
+
+<div id="jobsBar" hidden></div>
 
 <div id="anchors">
   <a data-s="s-overview" class="on">概览</a>
@@ -500,6 +501,7 @@
 </div>
 
 <script src="/player-select.js"></script>
+<script src="/jobs-bar.js"></script>
 <script src="/app.js"></script>
 <script src="/smoke.js"></script>
 <script src="/brand.js"></script>

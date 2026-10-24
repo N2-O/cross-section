@@ -119,7 +119,8 @@ if not os.path.isdir(MAPS_DIR):
 
 _conn = store2.connect(DB_PATH)
 _lock = threading.Lock()
-_jobs = {"running": False, "total": 0, "done": 0, "current": "", "errors": []}
+_jobs = {"running": False, "total": 0, "done": 0, "current": "", "errors": [],
+         "stage": "", "started_at": 0}
 
 
 def _conv(o):
@@ -462,6 +463,45 @@ def api_update_check():
         return {"ok": False, "pending": True, **base}
 
 
+def api_jobs():
+    """后台任务总览：解析与下载各自一条，前端拿来画顶部那条进度带。
+
+    两者可能同时跑（下载在独立线程，解析在另一个线程），所以分开返回，
+    由前端决定堆叠顺序。这里只做归一化，不加锁等待。
+    """
+    now = time.time()
+    a = dict(_jobs)
+    d = dict(_http_pull)
+
+    def _elapsed(rec):
+        t0 = float(rec.get("started_at") or 0)
+        return int(now - t0) if t0 and rec.get("running") else 0
+
+    return {
+        "analyze": {
+            "running": bool(a.get("running")),
+            "done": int(a.get("done") or 0),
+            "total": int(a.get("total") or 0),
+            "current": (a.get("current") or "").replace("\\", "/").split("/")[-1],
+            "stage": (a.get("stage") or "").replace("…", "").strip(),
+            "elapsed": _elapsed(a),
+            "errors": list(a.get("errors") or [])[:3],
+        },
+        "download": {
+            "running": bool(d.get("running")),
+            "done": int(d.get("done") or 0),
+            "total": int(d.get("total") or 0),
+            "current": (d.get("current") or ""),
+            "bytes": int(d.get("bytes") or 0),
+            "bytes_total": int(d.get("bytes_total") or 0),
+            "elapsed": _elapsed(d),
+            "ok_count": int(d.get("ok_count") or 0),
+            "fail_count": int(d.get("fail_count") or 0),
+            "error": d.get("error"),
+        },
+    }
+
+
 def api_reset_all():
     """清空所有分析数据、缓存、导出和设置。demo 文件不动。"""
     if _jobs["running"]:
@@ -602,7 +642,8 @@ def api_pull():
 # 直接 HTTP 下载（支持 Range 续传）。比「双击 bat 让 CS2 下」稳，也能走代理。
 _http_pull = {"running": False, "total": 0, "done": 0, "current": "",
               "bytes": 0, "bytes_total": 0, "error": None,
-              "ok_count": 0, "fail_count": 0, "errors": []}
+              "ok_count": 0, "fail_count": 0, "errors": [],
+              "started_at": 0}
 
 
 def _gc_pull_module():
@@ -669,7 +710,8 @@ def api_http_pull(items=None):
         return {"ok": False, "error": f"下载模块不可用：{e}"}
     _http_pull.update({"running": True, "total": len(items), "done": 0, "current": "",
                        "bytes": 0, "bytes_total": 0, "error": None,
-                       "ok_count": 0, "fail_count": 0, "errors": []})
+                       "ok_count": 0, "fail_count": 0, "errors": [],
+                       "started_at": time.time()})
     threading.Thread(target=_http_pull_worker, args=(list(items),), daemon=True).start()
     return {"ok": True, "total": len(items)}
 
@@ -762,7 +804,14 @@ def api_analyze(names: list[str], force: bool = False):
             for nm, path in todo:
                 _jobs["current"] = nm
                 try:
-                    mid = awpy_ingest.ingest_awpy(ws, path, me, log=lambda *a: None, force=force)
+                    # 把解析器内部阶段文字接到任务状态上，顶部那条进度就能显示
+                    # 「正在采样位置快照」这类人话，而不是干等一个不动的小时不动的条
+                    _jobs["started_at"] = time.time()
+                    _jobs["stage"] = "读取 demo"
+                    mid = awpy_ingest.ingest_awpy(
+                        ws, path, me, force=force,
+                        log=lambda *a: _jobs.update(
+                            stage=" ".join(str(x) for x in a).strip()))
                     # 只有这两个「写全局状态」的动作需要短锁
                     with _lock:
                         row = _conn.execute("SELECT map, platform, server FROM matches WHERE id=?", (mid,)).fetchone()
@@ -854,6 +903,8 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/state":
                 return self._send(*_json(api_state()))
+            if path == "/api/jobs":
+                return self._send(*_json(api_jobs()))
             if path == "/api/update_check":
                 return self._send(*_json(api_update_check()))
             if path == "/api/detect":
