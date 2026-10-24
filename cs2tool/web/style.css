@@ -537,3 +537,12 @@ body.nott [data-m]{border-bottom:0;cursor:auto}
   vertical-align:2px;cursor:pointer;
 }
 .ver-new:hover{border-color:rgba(123,212,75,.9);background:rgba(123,212,75,.1)}
+
+/* demo 列表最前面那两盏灯：左=原始 .dem 在不在，右=解析结果 */
+.lamps{display:inline-flex;gap:5px;align-items:center;vertical-align:middle}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:0 0 auto}
+.dot.on{background:#4ade80}
+.dot.off{background:#3f3f46}
+.dot.wait{background:#fbbf24;animation:dotPulse 1.2s ease-in-out infinite}
+.dot.bad{background:#ef4444}
+@keyframes dotPulse{0%,100%{opacity:.35}50%{opacity:1}}

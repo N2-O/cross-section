@@ -128,7 +128,10 @@ function renderGames() {
   const rows = ds.map(d => ({ ...d, st: byMid[d.match_id] || null }))
     .sort((a, b) => (b.played_at || b.mtime || '').localeCompare(a.played_at || a.mtime || ''));
 
-  $('#gameSub').textContent = `${rows.length} 个文件 · 已分析 ${rows.filter(r => r.analyzed).length}`;
+  const n_file = rows.filter(r => r.file_exists).length;
+  const n_an = rows.filter(r => r.analyzed).length;
+  $('#gameSub').textContent = `${rows.length} 场 · 已解析 ${n_an}`
+    + (n_file < rows.length ? ` · 原始文件在 ${n_file}（其余已瘦身）` : '');
   if (!rows.length) {
     $('#gameTable').innerHTML = '<div class="nil">目录里还没有 .dem 文件</div>';
     return;
@@ -172,6 +175,20 @@ function renderGames() {
   };
 
   $('#gameTable').innerHTML = table([
+    /* 最前面两盏灯：文件（原始 .dem 在不在）· 解析（有没有分析结果） */
+    { t: '状态', num: 1, get: r => {
+        const cur = (S.job && S.job.running) ? String(S.job.current || '') : '';
+        const parsing = cur && cur === r.name && !r.analyzed && !r.error;
+        const fileDot = r.file_exists
+          ? '<i class="dot on" title="原始 .dem 文件在"></i>'
+          : '<i class="dot off" title="原始 .dem 已删除（数据还在，但以后不能重新解析）"></i>';
+        let parseDot;
+        if (r.error) parseDot = `<i class="dot bad" title="解析失败：${esc(r.error)}"></i>`;
+        else if (r.analyzed) parseDot = '<i class="dot on" title="已解析"></i>';
+        else if (parsing) parseDot = '<i class="dot wait" title="正在解析…"></i>';
+        else parseDot = '<i class="dot off" title="还没解析"></i>';
+        return `<span class="lamps" title="左=原始文件　右=解析结果">${fileDot}${parseDot}</span>`;
+    } },
     { t: '地图', get: r => `<div class="gmap" title="${esc(r.name)}">
         <div class="mn">${esc(r.map ? mapCn(r.map) : '—')}</div>
         <div class="fs">${r.size ? (r.size / 1048576).toFixed(0) + ' MB' : ''}</div>
@@ -201,7 +218,10 @@ function renderGames() {
         const nm = esc(r.name);
         const tail = `<button class="mini" data-play="${nm}" title="把 demo 放进 CS2 目录并复制 playdemo 命令，粘进控制台就能看">⌨</button>` +
                      `<button class="mini" data-reparse="${nm}" title="只重新解析这一场（约 8 秒）">⟲</button>` +
-                     `<button class="mini del" data-del="${nm}" title="从列表移除这场（只删分析结果，原始 .dem 文件不动）">✕</button>`;
+                     (r.file_exists
+                       ? `<button class="mini" data-trim="${nm}" title="只删原始 .dem，分析数据和回放缓存都保留（省空间；删了以后这场不能再重新解析）">↓</button>`
+                       : '') +
+                     `<button class="mini del" data-del="${nm}" title="删除这场：原始文件 + 分析数据 + 回放缓存，全部移除">✕</button>`;
         if (r.error) return `<span class="op"><span class="l" title="${esc(r.error)}">失败</span>${tail}</span>`;
         if (!r.analyzed) return `<span class="op"><button data-analyze="${nm}">分析</button>${tail}</span>`;
         return `<span class="op"><a href="/replay.html?m=${r.match_id}" title="看这场回放">回放 →</a>${tail}</span>`;
@@ -241,15 +261,32 @@ function renderGames() {
     };
   });
 
-  /* 单场移除：删库里的分析结果 + 回放缓存，原始 .dem 文件不动 */
+  /* 全删这一场：原始 .dem + 分析数据 + 回放缓存。删完列表行消失，不可恢复。 */
   $$('#gameTable button[data-del]').forEach(b => {
     b.onclick = async () => {
       const nm = b.dataset.del;
-      if (!confirm(`从列表移除这一场？\n\n${nm}\n\n` +
-                   '只删工具里的分析结果和回放缓存；demos 目录里的原始 .dem 文件不动。\n' +
-                   '（下次点「扫描目录」它会以「未分析」的身份回来）')) return;
-      const r = await post('/api/delete_demo', { name: nm });
-      if (r.ok) { hint(r.msg || '已移除', true); load(); }
+      const row = (S.demos || []).find(d => d.name === nm) || {};
+      const mb = row.size ? (row.size / 1048576).toFixed(0) + ' MB' : '原始文件';
+      if (!confirm(`删除这一场？\n\n${nm}\n\n` +
+                   `将移除：原始文件（${mb}）+ 分析数据 + 回放缓存\n` +
+                   '不可恢复。只想省空间、保留数据的话，请用旁边的 ↓ 只删原始文件。')) return;
+      const r = await post('/api/delete_demo', { name: nm, mode: 'all' });
+      if (r.ok) { hint(r.msg || '已删除', true); load(); }
+      else hint(r.error || '失败', false);
+    };
+  });
+
+  /* 只删原始文件：分析结果和回放缓存都留着，列表上文件灯变灭、解析灯照旧 */
+  $$('#gameTable button[data-trim]').forEach(b => {
+    b.onclick = async () => {
+      const nm = b.dataset.trim;
+      const row = (S.demos || []).find(d => d.name === nm) || {};
+      const mb = row.size ? (row.size / 1048576).toFixed(0) + ' MB' : '原始文件';
+      if (!confirm(`只删除原始文件？\n\n${nm}（${mb}）\n\n` +
+                   '分析数据和回放缓存都保留，历史和图表不受影响。\n' +
+                   '但删掉之后这场就再也不能重新解析了。')) return;
+      const r = await post('/api/delete_demo', { name: nm, mode: 'file_only' });
+      if (r.ok) { hint(r.msg || '已删除原始文件', true); load(); }
       else hint(r.error || '失败', false);
     };
   });
@@ -260,6 +297,15 @@ async function pollJob(doneMsg = '分析完成') {
     try {
       const s = await api('/api/state');
       S.job = s.job;
+      // 解析是逐场推进的，列表也该逐场变：/api/state 已经带回最新 demos，
+      // 直接重渲染即可（保留滚动位置，否则每 1.2 秒跳一次顶）
+      if (s.demos && s.demos.length !== (S.demos || []).length ||
+          (s.demos && JSON.stringify(s.demos) !== JSON.stringify(S.demos || []))) {
+        S.demos = s.demos;
+        const y = window.scrollY;
+        renderGames();
+        window.scrollTo(0, y);
+      }
       jobUI(s.job);
       if (s.job && s.job.running) hint(`处理中 ${s.job.done}/${s.job.total}：${s.job.current || ''}`);
       else { clearInterval(t); hint(doneMsg, true); load(); }

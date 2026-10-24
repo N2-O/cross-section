@@ -272,6 +272,16 @@ def api_state():
     with _lock:
         me = _me(_conn)
         demos = store2.list_demos(_conn, me)
+        # 每场补两个「物理状态」，列表最前面那两盏灯就是读它们：
+        #   file_exists — 原始 .dem 还在不在
+        #   has_replay  — 回放缓存（replays/<match_id>.json）在不在
+        # 解析成功时回放缓存是同步生成的，所以正常情况下「解析灯亮 = 能回放」；
+        # has_replay 单独给出，是为了覆盖旧数据（那段代码之前解析的）和缓存失败的情况。
+        for _d in demos:
+            _d["file_exists"] = os.path.isfile(os.path.join(DEMO_DIR, _d.get("name") or ""))
+            _mid = _d.get("match_id")
+            _d["has_replay"] = bool(_mid) and os.path.isfile(
+                os.path.join(REPLAY_DIR, "%s.json" % int(_mid)))
         players = stats_api.player_list(_conn)
         ov = stats_api.overview(_conn, me) if me else {"empty": True}
         if me:
@@ -932,6 +942,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(*_json({"ok": False, "error": f"{type(e).__name__}: {e}"}, 500))
 
     def do_POST(self):
+        # DEMO_DIR 会在 /api/settings 里被改（用户改 demo 目录），所以整个 do_POST
+        # 都算「使用并可能重绑」它 —— 声明必须放在函数最开头，不能等到后面某个分支，
+        # 否则前面任何分支读到它都会被判定「使用早于 global 声明」。
+        global DEMO_DIR
         u = urlparse(self.path)
         try:
             ln = int(self.headers.get("Content-Length") or 0)
@@ -978,17 +992,37 @@ class Handler(BaseHTTPRequestHandler):
                                 pass
                 return self._send(*_json(api_analyze(names, force=True)))
             if u.path == "/api/delete_demo":
-                # 单场移除：只删库里的分析结果 + 回放缓存，**不动原始 .dem 文件**
-                # （删文件不可恢复；要真删文件，去 demos 目录自己删）
+                # mode=all（默认）：原始 .dem + 分析数据 + 回放缓存 + 列表行，一起删
+                # mode=file_only  ：只删原始 .dem，数据和回放缓存都留着（省空间用）
                 nm = str(payload.get("name") or "").strip()
                 if not nm:
                     return self._send(*_json({"ok": False, "error": "缺少 name"}))
+                mode = str(payload.get("mode") or "all").strip().lower()
+                demo_path = os.path.join(DEMO_DIR, nm)
                 with _lock:
                     row = _conn.execute("SELECT match_id FROM demos WHERE name=?",
                                         (nm,)).fetchone()
                     if not row:
                         return self._send(*_json({"ok": False, "error": f"列表里没有 {nm}"}))
                     mid = row["match_id"]
+
+                # 两种模式都要删原始文件；文件本来就不在就跳过
+                freed = 0
+                if os.path.isfile(demo_path):
+                    try:
+                        freed = os.path.getsize(demo_path)
+                        os.remove(demo_path)
+                    except OSError as e:
+                        return self._send(*_json({"ok": False, "error": f"删文件失败：{e}"}))
+
+                if mode == "file_only":
+                    # 只瘦身：demos 行留着，列表上文件灯变灭、解析灯照旧亮
+                    return self._send(*_json({
+                        "ok": True, "name": nm, "mode": "file_only", "freed": freed,
+                        "msg": "已删除原始文件（释放 %.0f MB），分析数据保留" % (freed / 1048576.0),
+                        "warn": "这场以后不能再重新解析了"}))
+
+                with _lock:
                     if mid:
                         store2.delete_match(_conn, int(mid))
                         try:
@@ -997,8 +1031,9 @@ class Handler(BaseHTTPRequestHandler):
                             pass
                     _conn.execute("DELETE FROM demos WHERE name=?", (nm,))
                     _conn.commit()
-                return self._send(*_json({"ok": True, "name": nm,
-                                          "msg": f"已移除 {nm}（原始 .dem 文件没删）"}))
+                return self._send(*_json({"ok": True, "name": nm, "mode": "all", "freed": freed,
+                                          "msg": "已删除 %s（原始文件 + 分析数据，释放 %.0f MB）"
+                                                 % (nm, freed / 1048576.0)}))
             if u.path == "/api/reset_all":
                 return self._send(*_json(api_reset_all()))
             if u.path == "/api/clear_cache":
@@ -1045,7 +1080,6 @@ class Handler(BaseHTTPRequestHandler):
                     # 用旧的 compute_match 重算会把口径覆盖回错误版本。
                 return self._send(*_json({"ok": True}))
             if u.path == "/api/settings":
-                global DEMO_DIR
                 upd = {}
                 nd = (payload.get("demos_dir") or "").strip().strip('"')
                 if nd:
