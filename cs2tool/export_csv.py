@@ -633,13 +633,23 @@ def map_pool(db_path: str) -> list[dict]:
         e["played"] += 1
         e["rounds"] += r["rounds"] or 0
         win = None
+        # 我方赢了几回合：a_win 记的是「A 队（上半场打 T 的那队）赢没赢」，
+        # 所以我在 A 队（首回合 T）就直接取 a_win，在 B 队（首回合 CT）要取反。
+        # 旧写法是拿 my_side 去匹配 a_side，在 B 队的场次会命中的是下半场、
+        # 而且胜负是反的 —— 5 场里 3 场会算错。
         if r["my_side"]:
-            w = conn.execute("""SELECT COUNT(*) FROM rounds WHERE match_id=? AND a_side=? AND a_win=1""",
-                             (r["id"], r["my_side"])).fetchone()[0]
-            l = conn.execute("""SELECT COUNT(*) FROM rounds WHERE match_id=? AND a_side=? AND a_win=0""",
-                             (r["id"], r["my_side"])).fetchone()[0]
-            if w or l:
-                win = 1 if w > l else 0
+            row = conn.execute(
+                "SELECT SUM(a_win) AS aw, COUNT(*) AS tot FROM rounds WHERE match_id=?",
+                (r["id"],)).fetchone()
+            aw, tot = (row["aw"] or 0), (row["tot"] or 0)
+            if tot:
+                my_wins = aw if r["my_side"] == "T" else tot - aw
+                if my_wins * 2 > tot:
+                    win = 1
+                elif my_wins * 2 == tot:
+                    win = None        # 平局不计入胜率（和 Demo 页一致）
+                else:
+                    win = 0
         if win == 1:
             e["win"] += 1
         elif win == 0:
