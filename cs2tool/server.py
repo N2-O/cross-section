@@ -22,7 +22,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
 
-VERSION = "6.2.5"
+VERSION = "6.2.3"
 # 开源发布仓库（检查新版本用）
 REPO_SLUG = "N2-O/cross-section"
 RELEASES_URL = f"https://github.com/{REPO_SLUG}/releases"
