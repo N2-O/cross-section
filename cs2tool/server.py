@@ -581,19 +581,28 @@ def _gc_pull_module():
         return None
 
 
-def api_gc_pull():
+def api_gc_pull(payload=None):
+    payload = payload or {}
     mod = _gc_pull_module()
     if mod is None:
         return {"ok": False, "need_patch": True,
                 "error": "这个功能需要「AutoPull 增量包」：把包解压到程序根目录后重启即可"}
-    mod.log = None
+    mode = str(payload.get("mode") or "recent")
+    log = lambda s: print("[autopull]", s, flush=True)
     try:
-        r = mod.fetch(DATA_DIR, log=lambda s: print("[autopull]", s, flush=True))
+        if mode == "codes":
+            codes = payload.get("codes") or []
+            if isinstance(codes, str):
+                codes = [c for c in re.split(r"[\s,，;；]+", codes) if c.strip()]
+            r = mod.fetch_by_codes(codes, DATA_DIR, log=log)
+        else:
+            r = mod.fetch(DATA_DIR, log=log)
     except Exception as e:
         return {"ok": False, "error": "AutoPull 出错：%s" % e}
-    if not r.get("ok"):
-        return r
-    print("[autopull] 拿到 %d 场，%d 场可下载" % (len(r["matches"]), len(r["urls"])), flush=True)
+    if r.get("ok"):
+        print("[autopull] %s：%d 场，%d 场可下载"
+              % ("按分享码" if mode == "codes" else "最近比赛",
+                 len(r.get("matches") or []), len(r.get("urls") or [])), flush=True)
     return r
 
 
@@ -1129,7 +1138,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(*_json(api_playdemo(payload.get("name"))))
             if u.path == "/api/gc_pull":
                 # 借本机 Steam 登录态取比赛列表（需要 AutoPull 增量包，主包没有这个文件）
-                return self._send(*_json(api_gc_pull()))
+                # mode=recent 取最近 8 场；mode=codes 按给定的分享码逐场查
+                return self._send(*_json(api_gc_pull(payload)))
             if u.path == "/api/http_pull":
                 # 直接走 Valve 的 demo CDN 下载（绕开 CS2 客户端）。
                 # urls = 从比赛历史页复制来的链接；codes = 上次清单（只能定位比赛，拼不出地址）

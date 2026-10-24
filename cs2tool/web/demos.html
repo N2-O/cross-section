@@ -110,14 +110,32 @@
     <div class="card"><div class="bd">
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button id="btnPull">⇩ 从 CS2 拉取</button>
-        <!-- 默认隐藏：只有装了 AutoPull 增量包（后端 /api/state 的 gc_pull=true）才显示 -->
-        <button id="btnPullNew" hidden title="从 Game Coordinator 取最近比赛并直接下载">⇣ 从 Steam 拉新比赛</button>
+        <!-- AutoPull：只在装了增量包时出现（后端 /api/state 的 gc_pull=true）-->
+        <button id="apRecent" hidden title="从 Game Coordinator 取最近比赛并直接下载">⇣ AutoPull · 最近比赛</button>
         <button id="btnScan">扫描目录</button>
         <button id="btnAnalyze">分析未处理</button>
         <button id="btnReparse" title="把所有 demo 从头重新解析一遍（清空现有分析结果）">⟲ 全部重新解析</button>
         <button id="btnExportCsv">导出完整 CSV</button>
         <button id="btnResetAll" title="清空所有分析数据、缓存、导出和设置（demo 原始文件不删）">⌫ 全部删除</button>
       </div>
+
+      <!-- AutoPull 的分享码区：按场补历史，只在装了增量包时出现 -->
+      <div id="apPanel" hidden style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line, rgba(255,255,255,.08))">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+          <span style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim, #8b8b8f)">AutoPull · 分享码</span>
+          <span id="apStatus" style="font-size:12.5px;color:var(--dim, #8b8b8f)"></span>
+        </div>
+        <textarea id="apCodes" rows="3" spellcheck="false"
+          placeholder="CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx　一行一个，多早的场次都行"
+          style="width:100%;box-sizing:border-box;font-family:inherit;font-size:13px;line-height:1.7;
+                 background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);
+                 border-radius:3px;padding:8px 10px;color:inherit;resize:vertical"></textarea>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap">
+          <button id="apByCodes">⇣ 按分享码下载</button>
+          <small style="color:var(--dim, #8b8b8f);font-size:12px">从比赛历史页每场的「分享」复制。每场约 10 秒（要问一次 GC）。用前先退出 CS2。</small>
+        </div>
+      </div>
+
       <div class="hint" id="opHint"></div>
       <!-- 拉取配置自检结果：点「🔍 检查拉取配置」或拉取失败时自动出现 -->
       <div id="pullDiag" hidden></div>

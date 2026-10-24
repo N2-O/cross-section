@@ -68,9 +68,10 @@ async function load() {
   S = await api('/api/state');
   const dv = $('#dver');
   if (dv) dv.textContent = S.version ? 'v' + S.version : 'v?（后端未重启）';
-  // 拉取按钮只在装了 AutoPull 增量包时出现；没装就完全不露出来
-  const btnPull = $('#btnPullNew');
-  if (btnPull) btnPull.hidden = S.gc_pull !== true;
+  // AutoPull 区域（按钮 + 分享码框）只在装了增量包时出现
+  const apOn = S.gc_pull === true;
+  if ($('#apRecent')) $('#apRecent').hidden = !apOn;
+  if ($('#apPanel')) $('#apPanel').hidden = !apOn;
   renderPlayers();
   // 两个路径都显示：出问题时用户能直接找到 db 文件，不用猜
   const _dp = S.paths?.demos || '', _db = S.paths?.db || '';
@@ -296,58 +297,86 @@ $('#btnPull').onclick = async () => {
 // 从 Steam 拉新比赛：读设置里的 key/auth/steamid/start_code，
 // 旧分享码链已移除：现在只有 AutoPull（GC 直取地址）和本地「从 CS2 拉取」两条路。
 // 配置不全时后端返回 missing 列表，这里提示去哪儿填。
-$('#btnPullNew').onclick = async () => {
-  const b = $('#btnPullNew');
-  const old = b.textContent;
-  b.disabled = true;
-  b.textContent = '请求中…';
-  hidePull();
+/* ================= AutoPull ================= */
+// 只在装了 AutoPull 增量包时显示（load() 里按 S.gc_pull 控制）。
+// 两条路：①取最近 8 场 ②按分享码指定场次（可以补很久以前的）。
+function apSay(txt, ok) {
+  const el = $('#apStatus');
+  if (!el) return;
+  el.textContent = txt || '';
+  el.style.color = ok === false ? 'var(--bad, #d0554a)' : (ok ? 'var(--ok, #4a9e6a)' : '');
+}
 
-  // 拉取走「AutoPull 增量包」：借本机 Steam 登录态向 GC 要比赛列表。
-  // 主程序里没有那个模块，会返回 need_patch —— 正式包不含任何碰 Steam 的代码。
-  let gc = {};
-  try {
-    gc = await post('/api/gc_pull', {});
-  } catch (e) {
-    gc = { ok: false, error: String(e) };
+// 库里已有的跳过，剩下的交给 /api/http_pull 下载（断点续传、进度条都是现成的）
+async function apDownload(urls) {
+  const have = (S.demos || []).map(d => String(d.name || ''));
+  const fresh = [];
+  for (const u of (urls || [])) {
+    const body = u.split('/730/')[1].replace(/\.dem\.bz2$/, '');
+    if (!have.some(n => n.includes(body))) fresh.push(u);
   }
+  if (!fresh.length) {
+    apSay(`没有新场次（这 ${(urls || []).length} 场都已经在库里）`, true);
+    return;
+  }
+  if (!confirm(`发现 ${fresh.length} 场新比赛，直接用工具下载？\n\n走断点续传，可关掉页面；每场 50-250 MB`)) {
+    apSay(`已取消，${fresh.length} 场待下载`);
+    return;
+  }
+  showPull();
+  const hp = await post('/api/http_pull', { urls: fresh });
+  if (hp.ok) {
+    hint(`开始下载 ${fresh.length} 场…`);
+    httpPullWatch();
+    apSay(`已加入下载：${fresh.length} 场`, true);
+  } else {
+    apSay(hp.error || '启动下载失败', false);
+  }
+}
+
+$('#apRecent').onclick = async () => {
+  const b = $('#apRecent'), old = b.textContent;
+  b.disabled = true;
+  b.textContent = '查询中…';
+  apSay('正在问 Steam（约 10 秒）…');
+  let r = {};
+  try { r = await post('/api/gc_pull', { mode: 'recent' }); } catch (e) { r = { ok: false, error: String(e) }; }
   b.disabled = false;
   b.textContent = old;
-
-  if (gc.need_patch) {
-    hint('拉取功能需要「AutoPull 增量包」—— 解压到程序根目录后重启一次即可启用', false);
-    return;
-  }
-  if (!gc.ok) {
-    hint(gc.error || '取比赛列表失败', false);
-    return;
-  }
-
-  // 只下库里还没有的场次
+  if (r.need_patch) { apSay('需要 AutoPull 增量包', false); return; }
+  if (!r.ok) { apSay(r.error || '取不到比赛列表', false); return; }
+  const n = (r.matches || []).length;
   const have = (S.demos || []).map(d => String(d.name || ''));
-  const urls = (gc.urls || []).filter(u => {
+  const missing = (r.urls || []).filter(u => {
     const body = u.split('/730/')[1].replace(/\.dem\.bz2$/, '');
-    return !have.some(n => n.includes(body));
-  });
+    return !have.some(x => x.includes(body));
+  }).length;
+  apSay(`最近 ${n} 场，其中 ${missing} 场未下载`, true);
+  await apDownload(r.urls);
+};
 
-  if (!urls.length) {
-    hint(`没有新比赛（最近 ${(gc.matches || []).length} 场都已经在库里了）`, true);
+$('#apByCodes').onclick = async () => {
+  const raw = ($('#apCodes').value || '').trim();
+  if (!raw) { apSay('先把分享码粘上面', false); return; }
+  const codes = [...new Set((raw.match(/CSGO-[A-Za-z0-9-]{20,}/gi) || []).map(s => s.trim()))];
+  if (!codes.length) { apSay('没认出分享码（形如 CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx）', false); return; }
+  const b = $('#apByCodes'), old = b.textContent;
+  b.disabled = true;
+  b.textContent = `查询 ${codes.length} 场…`;
+  apSay(`逐场查询，预计 ${codes.length * 10} 秒…`);
+  let r = {};
+  try { r = await post('/api/gc_pull', { mode: 'codes', codes }); } catch (e) { r = { ok: false, error: String(e) }; }
+  b.disabled = false;
+  b.textContent = old;
+  if (r.need_patch) { apSay('需要 AutoPull 增量包', false); return; }
+  if (!r.ok) {
+    const f = (r.failed || [])[0];
+    apSay((r.error || '查询失败') + (f ? `（${f[0]}）` : ''), false);
     return;
   }
-  if (!confirm(`发现 ${urls.length} 场新比赛，直接用工具下载？\n\n` +
-               '走断点续传，可关掉页面；每场 50-250 MB')) {
-    hint('已取消，下次点这里还能重来', false);
-    return;
-  }
-
-  showPull();
-  const hp = await post('/api/http_pull', { urls });
-  if (hp.ok) {
-    hint(`开始下载 ${urls.length} 场…`);
-    httpPullWatch();
-  } else {
-    hint(hp.error || '启动下载失败', false);
-  }
+  const nfail = (r.failed || []).length;
+  apSay(`查到 ${(r.urls || []).length} 场可下载` + (nfail ? `，${nfail} 场失败` : ''), true);
+  await apDownload(r.urls);
 };
 
 let _hpTimer = null;                 // HTTP 直下进度的定时器（hidePull 里要清，所以先声明）
