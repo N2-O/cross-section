@@ -2,7 +2,7 @@
 
 # Cross-Section
 
-**v6.2.1** · 修订于 2026-10-24 · [更新记录](CHANGELOG.md)
+**v6.2.2** · 修订于 2026-10-24 · [更新记录](CHANGELOG.md)
 
 **把每一场 CS2 对局切开，看横截面。**
 
@@ -17,7 +17,7 @@
 >
 > **四、统计结果不保证准确。** 不保证与 HLTV、Leetify 或任何平台的自有统计数值一致。结果仅供个人参考，不得用于赌博、投注、赛事裁决、职业选拔或任何涉及金钱的决策。
 >
-> **五、游戏素材版权归 Valve。** `cs2tool/web/icons/` 与 `cs2tool/web/maps/` 内素材的著作权属 Valve Corporation，商业分发须自行取得授权。
+> **五、游戏素材版权归 Valve。** `cs2tool/web/icons/`、`cs2tool/web/maps/` 与 `cs2tool/overviews/` 内素材的著作权属 Valve Corporation，商业分发须自行取得授权。
 >
 > 完整条款见 [**DISCLAIMER.md**](DISCLAIMER.md)。下载、解压、运行即视为接受。
 

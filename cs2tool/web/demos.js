@@ -144,35 +144,41 @@ function renderGames() {
     return;
   }
 
-  /* demos[] 没有 st 子对象，统计字段直接挂在 r 上（me_kills / me_adr / ...）。
-     比分 = 我方赢的回合 : 输的回合；加时局（>24 回合）单独标出来。 */
+  /* demos[] 没有 st 子对象，统计字段直接挂在 r 上（me_kills / me_adr / ...）。 */
   const hasRes = r => (r.rounds || 0) > 0;
-  /* 这场 demo 里没有我（不是我打的 / 我中途才进场）：不能把我的队算成 T 方，
-     结果列直接写「无你」，不然会显示一个跟我无关的胜负。 */
-  const noMe = r => r.match_id && r.me_in === 0;
+  /* 比分与胜负：完全走客观口径（team_a_wins，从回合号 + winner 算，与「我」无关），
+     再用 my_side（上半场阵营）判断我在哪一队：
+        my_side='T'  → 我在 A 队（上半打 T 的那队）
+        my_side='CT' → 我在 B 队
+     这样即使 a_win 全 0（我在这场击杀记录里没出现、或没设 ID），也不会显示成 0:xx。 */
+  const scoreParts = r => {
+    const a = r.team_a_wins ?? 0, total = r.rounds || 0;
+    return { a: a, b: total - a, total: total };
+  };
   const resOf = r => {
-    if (noMe(r)) {
-      const a = r.team_a_wins ?? 0, tot = r.rounds || 0, b = tot - a;
-      const who = a === b ? '平' : (a > b ? '先打 T 的队赢' : '先打 CT 的队赢');
-      return `<span class="m" title="这场 demo 里没有你的 steamid（可能不是你打的，或你中途才进场）。本场 ${a}:${b}，${who}">无你</span>`;
-    }
     if (!hasRes(r)) return '—';
-    const w = r.wins || 0, t = r.rounds;
-    if (w * 2 > t) return '<span class="w">胜</span>';
-    if (w * 2 === t) return '<span class="d">平</span>';
+    const p = scoreParts(r);
+    if (!r.my_side) {
+      return `<span class="m" title="这场 demo 里没有你的记录（不是你打的，或你中途才进场）。本场 ${p.a}:${p.b}">无你</span>`;
+    }
+    const mine = r.my_side === 'T' ? p.a : p.b;
+    const theirs = r.my_side === 'T' ? p.b : p.a;
+    if (mine > theirs) return '<span class="w">胜</span>';
+    if (mine === theirs) return '<span class="d">平</span>';
     return '<span class="l">负</span>';
   };
   const scoreOf = r => {
     if (!hasRes(r)) return '—';
-    const w = r.wins || 0, t = r.rounds;
-    const ot = t > 24 ? '<span class="ot">加时</span>' : '';
-    if (noMe(r)) {
-      /* 没我的场：给队伍口径的比分。A 队 = 上半场打 T 的那队；
-         不能用「T 阵营胜 : CT 阵营胜」求和，换边后那是两支不同的队。 */
-      const a = r.team_a_wins ?? 0, tot = r.rounds || 0, b = tot - a;
-      return `<span class="m" title="这场 demo 里没有你的 steamid。比分按队伍算：先打 T 的队 ${a} : 先打 CT 的队 ${b}">${a}:${b}</span>${ot}`;
+    const p = scoreParts(r);
+    const ot = p.total > 24 ? '<span class="ot">加时</span>' : '';
+    if (!r.my_side) {
+      /* 完全不知道我在哪边：给客观比分。A 队 = 上半打 T 的那队，
+         不能拿「T 阵营胜 : CT 阵营胜」求和——换边后那是两支不同的队。 */
+      return `<span class="m" title="这场 demo 里没有你的记录。比分按队伍算：先打 T 的队 ${p.a} : 先打 CT 的队 ${p.b}">${p.a}:${p.b}</span>${ot}`;
     }
-    return `${w}:${t - w}${ot}`;
+    const mine = r.my_side === 'T' ? p.a : p.b;
+    const theirs = r.my_side === 'T' ? p.b : p.a;
+    return `${mine}:${theirs}${ot}`;
   };
 
   $('#gameTable').innerHTML = table([

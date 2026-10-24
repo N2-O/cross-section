@@ -15,7 +15,7 @@
 
 **1.3** 「用户」指下载、安装、复制、运行或以其他任何方式使用本软件的自然人或法人。
 
-**1.4** 「游戏素材」指本软件 `cs2tool/web/icons/` 与 `cs2tool/web/maps/` 目录下的全部图像文件及其衍生数据。
+**1.4** 「游戏素材」指本软件 `cs2tool/web/icons/`、`cs2tool/web/maps/` 与 `cs2tool/overviews/` 目录下的全部图像文件及其衍生数据。
 
 **1.5** 「第三方组件」指本软件所依赖、但非由作者编写的软件库、运行时及数据。
 
@@ -116,13 +116,13 @@
 
 **6.2** MIT 许可证的授权范围**仅限于本软件的自研代码**，不覆盖以下内容：
 
-- **游戏素材**：`cs2tool/web/icons/` 与 `cs2tool/web/maps/` 下的全部文件，著作权归 Valve，未经其授权不得用于商业分发；
+- **游戏素材**：`cs2tool/web/icons/`、`cs2tool/web/maps/` 与 `cs2tool/overviews/` 下的全部文件，著作权归 Valve，未经其授权不得用于商业分发；
 - **第三方组件**：其各自许可证为准（见 `THIRD-PARTY-NOTICES.md`）；
 - **商标**：不得将 `Counter-Strike`、`CS2` 等标识用于商业宣传，不得以任何方式暗示本软件或经修改的版本与 Valve 存在关联，或获得 Valve 的认可。
 
 **6.3** 用户拟对**本软件或其修改版本进行商业分发**的，应当自行解决游戏素材与商标的授权问题。作者不就此提供任何授权、担保、协助或法律意见，亦不承担由此产生的任何责任。
 
-**6.4** 用户拟商业分发且不希望处理上述素材问题的，可采用以下方式：删除 `cs2tool/web/icons/` 与 `cs2tool/web/maps/` 两个目录。删除后本软件其余功能正常，相关图标与地图显示为空白。
+**6.4** 用户拟商业分发且不希望处理上述素材问题的，可采用以下方式：删除 `cs2tool/web/icons/`、`cs2tool/web/maps/` 与 `cs2tool/overviews/` 两个目录。删除后本软件其余功能正常，相关图标与地图显示为空白。
 
 **6.5** 依据 MIT 许可证的要求，任何再分发行为均须保留本项目的版权声明与许可声明，并附上本文件及 `THIRD-PARTY-NOTICES.md`。
 
@@ -195,7 +195,7 @@
 
 *Non-binding summary. The Chinese text prevails.*
 
-**Nature.** Cross-Section is an unofficial, third-party project developed independently. It is **not affiliated with, authorized, sponsored, or endorsed by Valve Corporation**. `Counter-Strike`, `CS2`, and related marks are trademarks of Valve Corporation. Game assets included in `cs2tool/web/icons/` and `cs2tool/web/maps/` are the property of Valve and are distributed solely to enable offline display; they will be removed upon any objection from the rights holder.
+**Nature.** Cross-Section is an unofficial, third-party project developed independently. It is **not affiliated with, authorized, sponsored, or endorsed by Valve Corporation**. `Counter-Strike`, `CS2`, and related marks are trademarks of Valve Corporation. Game assets included in `cs2tool/web/icons/`, `cs2tool/web/maps/` and `cs2tool/overviews/` are the property of Valve and are distributed solely to enable offline display; they will be removed upon any objection from the rights holder.
 
 **Function.** The software reads `.dem` replay files already present on the user's disk and performs offline analysis. It **does not** read game process memory, inject code, hook APIs, modify game files, simulate input, or communicate with the game client at runtime. It provides **no in-game advantage** and is **not a cheat tool**. However, **no warranty or guarantee of any kind is made regarding the user's account status** — anti-cheat policies are determined independently by third parties, are outside the author's control, and the user assumes all associated risk.
 
@@ -203,7 +203,7 @@
 
 **Data handling.** The software **uploads nothing**, collects **no telemetry**, and requires **no account**. It makes at most **one** outbound request: fetching the latest release version from GitHub's public pages, used solely to display an update indicator. That request carries no local data, no cookies, and no device or user identifiers. Note that replay files contain other participants' Steam IDs and nicknames; users are responsible for evaluating privacy implications before sharing any export.
 
-**Commercial use.** The project's own code is licensed under **MIT**, which **permits commercial use**. However, MIT covers **only the author's original code** — it does **not** cover the Valve-owned game assets, third-party dependencies, or trademarks. Anyone commercially redistributing this software or a modified version **must independently resolve those rights**; no authorization or assistance is provided. Removing `cs2tool/web/icons/` and `cs2tool/web/maps/` is a practical way to avoid the asset issue.
+**Commercial use.** The project's own code is licensed under **MIT**, which **permits commercial use**. However, MIT covers **only the author's original code** — it does **not** cover the Valve-owned game assets, third-party dependencies, or trademarks. Anyone commercially redistributing this software or a modified version **must independently resolve those rights**; no authorization or assistance is provided. Removing `cs2tool/web/icons/`, `cs2tool/web/maps/` and `cs2tool/overviews/` is a practical way to avoid the asset issue.
 
 **Liability.** The software is provided **"AS IS"**, without warranty of any kind. To the maximum extent permitted by law, the author is **not liable** for any damages arising from its use, including data loss, account penalties, device damage, loss of profit, or third-party claims. This document does not exclude rights granted by mandatory local law.
 

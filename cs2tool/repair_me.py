@@ -98,31 +98,29 @@ def main() -> int:
 
         fs_row = conn.execute("SELECT first_side FROM players WHERE match_id=? AND steamid=?",
                               (mid, me)).fetchone()
-        if not fs_row or not fs_row["first_side"]:
-            # 这场没有我：阵营留空，别再拿 T 方冒充
-            n_nome += 1
-            if not a.dry:
-                with conn:
-                    conn.execute("UPDATE rounds SET a_side='', a_win=0 WHERE match_id=?", (mid,))
-                    if m["my_steamid"] != me:
-                        pass  # 保持原值：这场确实没我，写我的话 _me 也照样 JOIN 不到
-            continue
+        fs = fs_row["first_side"] if fs_row and fs_row["first_side"] else None
 
-        fs = fs_row["first_side"]
+        # a_side 一律按「A 队 = 上半场打 T 的那队」重算，与这场有没有我无关。
+        # 旧逻辑在没有我时写 a_win=0，会让比分显示成 0:总回合数、胜场全归零。
         w = 0
         if not a.dry:
             with conn:
                 for r in rd:
-                    s = side_of(fs, int(r["round"]))
+                    s = side_of("T", int(r["round"]))
                     win = int(r["winner"] == s)
                     w += win
                     conn.execute("UPDATE rounds SET a_side=?, a_win=? WHERE match_id=? AND round=?",
                                  (s, win, mid, r["round"]))
-                conn.execute("UPDATE matches SET my_steamid=? WHERE id=?", (me, mid))
-                conn.execute("UPDATE players SET is_me=(steamid=?) WHERE match_id=?", (me, mid))
+                if fs:
+                    conn.execute("UPDATE matches SET my_steamid=? WHERE id=?", (me, mid))
+                    conn.execute("UPDATE players SET is_me=(steamid=?) WHERE match_id=?", (me, mid))
+                else:
+                    n_nome += 1
         else:
             for r in rd:
-                w += int(r["winner"] == side_of(fs, int(r["round"])))
+                w += int(r["winner"] == side_of("T", int(r["round"])))
+            if not fs:
+                n_nome += 1
         n_fixed += 1
         after_t += len(rd)
         after_w += w

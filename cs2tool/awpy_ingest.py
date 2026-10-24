@@ -520,17 +520,14 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
             return o if ot % 2 == 0 else s
         return o
 
-    # A 队（a_side）：每回合我方所在阵营，换边后跟着变
-    # 本场没识别出我（my_side0=None）时**不要**硬写成 T —— 那会把「别人的战绩」
-    # 冒充成我的：比分和胜负全按 T 方算，看起来有数据、其实跟我无关。
-    my_side0 = pside.get(my_steamid) if my_steamid else None
+    # A 队（a_side）：**上半场打 T 的那队**，与「我」是谁无关。
+    # 换边后跟着变（side_of 从 "T" 起算）。这样即使本场没识别出我，每回合的
+    # 客观成败也有值 —— 旧逻辑在这种情况下写 a_win=0，导致比分显示成 0:总回合数、
+    # 胜场统计也全归零。「我在哪一队」由 players.first_side（my_side）另行判断。
     with conn:
         for rr in conn.execute("SELECT round, winner FROM rounds WHERE match_id=?", (mid,)):
-            if my_side0:
-                a_side = side_of(my_side0, int(rr["round"]))
-                a_win = int(rr["winner"] == a_side)
-            else:
-                a_side, a_win = "", 0
+            a_side = side_of("T", int(rr["round"]))
+            a_win = int(rr["winner"] == a_side)
             conn.execute("UPDATE rounds SET a_side=?, a_win=? WHERE match_id=? AND round=?",
                          (a_side, a_win, mid, rr["round"]))
 
