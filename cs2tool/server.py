@@ -600,11 +600,13 @@ def api_http_pull(items=None):
     if _http_pull["running"]:
         return {"ok": False, "error": "已有下载任务在进行"}
     if not items:
-        # 待下载清单：优先 pull_pending，其次 pull_last（里面同样带 codes）
+        # 待下载清单：优先 pull_pending，其次 pull_last
+        # 新链写 urls（AutoPull 给的完整地址），老链写 codes（分享码，已废弃）
         for fn in ("pull_pending.json", "pull_last.json"):
             try:
                 with open(os.path.join(DATA_DIR, fn), encoding="utf-8") as f:
-                    items = (json.load(f) or {}).get("codes") or []
+                    _d = json.load(f) or {}
+                    items = _d.get("urls") or _d.get("codes") or []
             except Exception:
                 items = []
             if items:
@@ -1368,10 +1370,10 @@ def _kill_port_owner(port: int) -> bool:
 
 
 def _auto_pull_loop():
-    """后台定时检查新比赛。
+    """后台定时取新比赛，把库里还没有的场次写进待下载清单。
 
-    只做到「跑脚本、生成下载清单」这一步，不会自动启动 CS2——
-    你正在打游戏时被弹一个下载窗口是很烦的。
+    走 AutoPull 增量包（gc_pull）。没装那个模块就完全不做事 —— 主包不碰 Steam。
+    只写清单不自动下载：正在打游戏时被弹一个下载很烦，也白占带宽。
     """
     import time as _t
     _t.sleep(90)                       # 启动后先让初始化和扫描跑完
@@ -1382,16 +1384,34 @@ def _auto_pull_loop():
             if hours <= 0:
                 _t.sleep(1800)
                 continue
-            need = [k for k in ("steam_api_key", "steam_auth_code",
-                                "steamid", "start_code")
-                    if not str(st.get(k) or "").strip()]
-            if need:
+            mod = _gc_pull_module()
+            if mod is None:
                 _t.sleep(1800)
                 continue
-            script = os.path.join(HERE, "cs2_pull_new.py")
-            if os.path.isfile(script):
-                subprocess.run([sys.executable, script, "--data", DATA_DIR], cwd=HERE,
-                               timeout=300, capture_output=True)
+            r = mod.fetch(DATA_DIR, log=lambda s: print("[autopull]", s, flush=True))
+            if r.get("ok") and r.get("urls"):
+                known = set()
+                with _lock:
+                    try:
+                        for (nm,) in _conn.execute("SELECT name FROM demos"):
+                            known.add(str(nm))
+                    except Exception:
+                        pass
+                fresh = []
+                for u in r["urls"]:
+                    body = u.rsplit("/730/", 1)[-1].replace(".dem.bz2", "")
+                    if not any(body in k for k in known):
+                        fresh.append(u)
+                if fresh:
+                    try:
+                        with open(os.path.join(DATA_DIR, "pull_pending.json"), "w",
+                                  encoding="utf-8") as _f:
+                            json.dump({"t": time.strftime("%Y-%m-%d %H:%M:%S"),
+                                       "total": len(fresh), "urls": fresh},
+                                      _f, ensure_ascii=False)
+                    except Exception:
+                        traceback.print_exc()
+                    print("[autopull] 自动检查：%d 场待下载" % len(fresh), flush=True)
             _t.sleep(max(600, hours * 3600))
         except Exception:
             traceback.print_exc()

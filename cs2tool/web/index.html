@@ -466,32 +466,24 @@
         <div class="row"><input id="setSid" spellcheck="false" placeholder="7656119…　也可以直接粘 steamcommunity.com/profiles/… 链接"></div>
         <small>可以直接粘贴个人资料链接（会自动取出数字）。<b>它决定哪些比赛算「你的」</b>，没有它分不出队友/敌人。</small></label>
 
-      <div id="steamCfg" hidden>
-        <div class="msec">自动拉取官匹 demo · 需要 AutoPull 增量包</div>
-        <label class="fld"><span>Steam Web API Key</span>
-          <div class="row"><input id="setKey" type="password" spellcheck="false" placeholder="32 位十六进制"></div>
-          <small>去 <a href="https://steamcommunity.com/dev/apikey" target="_blank" rel="noopener"><code>steamcommunity.com/dev/apikey</code></a> 生成，域名填 <code>localhost</code>。只读权限，不能登录或交易。</small></label>
-        <label class="fld"><span>游戏认证码</span>
-          <div class="row"><input id="setAuth" spellcheck="false" placeholder="例如 ABCD1-23456-7890A"></div>
-          <small>去 <a href="https://help.steampowered.com/zh-cn/wizard/HelpWithGameIssue/?appid=730&amp;issueid=128" target="_blank" rel="noopener"><code>https://help.steampowered.com/zh-cn/wizard/HelpWithGameIssue/?appid=730&amp;issueid=128</code></a><br>
-          （需先登录 Steam，页面标题 Game Authentication Codes）→ 点 <b>Create Authentication Code</b> → 得到 <code>XXXX-XXXXX-XXXX</code>。<br>
-          只能读比赛历史，不能登录、不能交易；<b>有效期约 24 小时</b>，过期回这页重点一次。</small></label>
-        <label class="fld"><span>已处理到的分享码</span>
-          <div class="row"><input id="setStart" spellcheck="false" placeholder="CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx　粘分享链接也行"></div>
-          <small>旧分享码链路的起点，只在没有 AutoPull 增量包时才会用到。<b>必须是最近一个月内的</b>，且只能往后拉。</small></label>
+      <div id="steamOff" hidden>
+        <div class="msec">自动拉取官匹 demo</div>
+        <small style="display:block;line-height:1.85">未安装 <b>AutoPull 增量包</b>。<br>
+        把包解压到程序根目录（和 <code>START.bat</code> 同级）再重启一次，Demo 页就会出现「⇣ 从 Steam 拉新比赛」。<br>
+        这个功能借本机 Steam 的登录态向 Game Coordinator 请求比赛列表，属于可选功能，所以不放进正式包。</small>
+      </div>
+
+      <div id="steamOn" hidden>
+        <div class="msec">自动拉取官匹 demo</div>
+        <small style="display:block;line-height:1.85"><b>AutoPull 已启用</b>，不需要任何配置。<br>
+        Demo 页点「⇣ 从 Steam 拉新比赛」即可 —— 工具借你本机已登录的 Steam 去取比赛列表，再直连 Valve 的 CDN 下载。<br>
+        <b>用之前把 CS2 完全退出</b>（游戏占着 GC 会话，工具会被挡回来）。只要登录态、不要密码，也不读浏览器 cookie。</small>
         <label class="fld"><span>自动检查</span>
           <div class="row" style="gap:8px;align-items:center">
             <input id="setAutoPull" type="number" min="0" max="72" step="1" value="0" style="flex:0 0 80px">
             <span style="font-size: 13px;color:var(--dim)">小时一次，0 = 关闭</span>
           </div>
-          <small>到点自动跑一次拉取，有新比赛会生成下载清单并在 Demo 页显示。<b>不会自动启动 CS2</b>。</small></label>
-      </div>
-
-      <div id="steamOff" hidden>
-        <div class="msec">自动拉取官匹 demo</div>
-        <small style="display:block;line-height:1.85">未安装 <b>AutoPull 增量包</b>。<br>
-        把包解压到程序根目录（和 <code>START.bat</code> 同级）再重启一次，这里就会出现拉取相关配置。<br>
-        这个功能借本机 Steam 的登录态向 Game Coordinator 请求比赛列表，属于可选功能，所以不放进正式包。</small>
+          <small>到点自动取一次比赛列表，把库里还没有的场次放进待下载清单。<b>不会自动开下载，也不会启动 CS2</b>；检测到 CS2 在跑的这一轮会跳过。</small></label>
       </div>
 
       <div class="msec">数据</div>

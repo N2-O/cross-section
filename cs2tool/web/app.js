@@ -1101,15 +1101,11 @@ function openSettings() {
   if ($('#setDemos')) $('#setDemos').value = st.demos_dir || p.demos || '';
   if ($('#setData')) $('#setData').value = st.data_dir || p.data || '';
   if ($('#setCs2')) $('#setCs2').value = st.cs2_dir || '';
-  // Steam 自动拉取：这一段只在解压了 AutoPull 增量包时才有意义（后端没那个模块就整块藏掉）
+  // AutoPull 增量包：装了才显示「已启用」，没装就显示怎么装。零配置。
   const gcOn = S.gc_pull === true;
-  if ($('#steamCfg')) $('#steamCfg').hidden = !gcOn;
+  if ($('#steamOn')) $('#steamOn').hidden = !gcOn;
   if ($('#steamOff')) $('#steamOff').hidden = gcOn;
-  // 元素即使隐藏也仍在 DOM 里，保存时照样读得到值，不会把已填的配置清空
-  if ($('#setKey')) $('#setKey').value = st.steam_api_key || '';
-  if ($('#setAuth')) $('#setAuth').value = st.steam_auth_code || '';
   if ($('#setSid')) $('#setSid').value = st.steamid || '';
-  if ($('#setStart')) $('#setStart').value = st.start_code || '';
   if ($('#setAutoPull')) $('#setAutoPull').value = st.auto_pull_hours ?? 0;
   if ($('#setSmoke')) $('#setSmoke').checked = st.fx_smoke === undefined ? true : Number(st.fx_smoke) !== 0;
   if ($('#setTip')) $('#setTip').checked = st.fx_tip === undefined ? true : Number(st.fx_tip) !== 0;
@@ -1134,20 +1130,21 @@ if ($('#setMinM')) $('#setMinM').oninput = e => {
 };
 if ($('#setSave')) $('#setSave').onclick = async () => {
   const h = $('#setHint');
-  const r = await post('/api/settings', {
+  const payload = {
     demos_dir: $('#setDemos').value,
     data_dir: $('#setData').value,
     cs2_dir: $('#setCs2').value,
-    steam_api_key: $('#setKey') ? $('#setKey').value : '',
-    steam_auth_code: $('#setAuth') ? $('#setAuth').value : '',
+    // 拉取改用 AutoPull 增量包后不再需要 api key / 认证码 / 分享码，
+    // 这里也不再提交这三项，老配置原样留在 settings.json 里不动
     steamid: $('#setSid') ? $('#setSid').value : '',
-    start_code: $('#setStart') ? $('#setStart').value : '',
-    auto_pull_hours: $('#setAutoPull') ? Number($('#setAutoPull').value || 0) : 0,
     fx_smoke: $('#setSmoke').checked ? 1 : 0,
     fx_tip: $('#setTip').checked ? 1 : 0,
     theme_tint: hexToTint($('#setTint').value),
     player_min_matches: $('#setMinM') ? Number($('#setMinM').value) : 1,
-  });
+  };
+  // 这个输入框只在装了 AutoPull 时才存在；没有就别提交，免得把老值抹成 0
+  if ($('#setAutoPull')) payload.auto_pull_hours = Number($('#setAutoPull').value || 0);
+  const r = await post('/api/settings', payload);
   if (!r.ok) { h.className = 'hint'; h.textContent = r.error || '保存失败'; return; }
   h.className = 'hint ok';
   const bits = [];
