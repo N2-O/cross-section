@@ -121,7 +121,16 @@ function renderPlayers() {
   ).join('');
   sel.title = `共 ${ps.length} 名玩家；括号里是计入统计的场次 / 总场次`;
   sel.onchange = async e => {
-    await post('/api/set_me', { steamid: Number(e.target.value) });
+    // 不能 Number() —— SteamID64 超出 JS 安全整数范围，转数字会丢尾数
+    // （76561199385933782 → 76561199385933780），后端查不到这个人就静默拒绝
+    let r = null;
+    try {
+      r = await post('/api/set_me', { steamid: String(e.target.value) });
+    } catch (err) {
+      hint('切换失败：' + String(err), false);
+      return;
+    }
+    if (r && r.ok === false) { hint(r.error || '切换失败', false); return; }
     load();
   };
 }
