@@ -71,7 +71,9 @@
   font-variant-numeric:tabular-nums}
 .pbar{height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden}
 .pbar.thin{height:2px}
-.pbar i{display:block;height:100%;width:0;background:var(--tint);
+/* --tint 是 RGB 三元组（6,6,7），不能直接当颜色值用，否则是非法声明、填充层透明，
+   进度条看起来永远不动。这里跟顶栏解析进度条保持一致，用 --warn。 */
+.pbar i{display:block;height:100%;width:0;background:var(--warn);
   transition:width .3s ease}
 .tb{width:100%;border-collapse:collapse;font-size: 13px}
 .tb th{text-align:left;font-weight:500;color:var(--dim);font-size: 12px;
