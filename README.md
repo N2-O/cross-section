@@ -2,7 +2,7 @@
 
 # Cross-Section
 
-**v6.2.0** · 修订于 2026-10-24 · [更新记录](CHANGELOG.md)
+**v6.2.1** · 修订于 2026-10-24 · [更新记录](CHANGELOG.md)
 
 **把每一场 CS2 对局切开，看横截面。**
 
@@ -63,22 +63,29 @@ Cross-Section 做的事，是把这个账本翻成可读的东西 —— 而且�
 
 ---
 
-## 两种装法
+## 装法（Windows x64）
 
-### 便携版（推荐，Windows x64）
+从 [Releases](../../releases/latest) 下载最新的 `Cross-Section-v*.zip`（约 4.7 MB），解压到任意目录，双击 `START.bat`。
 
-从 [Releases](../../releases/latest) 下载最新的 `Cross-Section-v*-Portable.zip`，解压到任意目录，双击 `START.bat`。
+**不需要预装 Python、不需要 pip、不需要管理员权限。** 首次启动时它自己装一套运行环境：
 
-自带 Python 3.12 运行时和全部依赖，**不需要装 Python、不需要 pip、不需要联网**。zip 约 74.5 MB，解压后约 230 MB，主要体积是 Python 运行时和依赖库（polars 的二进制占大头）。
+- Python 3.12 embeddable（约 11 MB）
+- awpy + polars 等 10 个依赖（约 60 MB）
 
-### 源码版
+全部从国内镜像拉（清华 → 阿里 → 腾讯 → 华为云，逐个回退，实测第一顺位就通），大概一两分钟。**只有第一次需要联网**，之后启动秒开；升级时覆盖程序文件也不会重下环境。装好的东西都在程序目录的 `python/` 里，删掉整个文件夹就干净了。
 
-需要 Python 3.10+。
+也可以手动提前跑 `SETUP.bat` —— 跟首次启动自动做的是同一件事，只是能提前看到进度。
+
+### 已经装了 Python 的话
+
+需要 Python 3.10+：
 
 ```bash
 pip install -r requirements.txt
 python cs2tool/server.py --port 8790
 ```
+
+这条路径不会用 `python/` 目录里的运行时。
 
 浏览器会自动打开 `http://127.0.0.1:8790`。
 

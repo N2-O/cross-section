@@ -481,7 +481,7 @@ footer .cols p{margin:0}
       <div>
         <div class="n">01</div>
         <h4>解压</h4>
-        <p>把 zip 解压到任意目录。<strong>不需要安装 Python</strong>，运行时已包含在 <code>python/</code> 目录内。</p>
+        <p>把 zip 解压到任意目录。<strong>不用预装 Python</strong>——首次启动会自动下载一套运行环境（走国内镜像，约 70 MB，只做一次）。</p>
       </div>
       <div>
         <div class="n">02</div>
@@ -554,19 +554,19 @@ footer .cols p{margin:0}
     <div class="sec-h">
       <span class="idx">05</span>
       <h2>拿一个走</h2>
-      <span class="note">v6.2.0 · 2026-10-24 · Windows x64</span>
+      <span class="note">v6.2.1 · 2026-10-24 · Windows x64</span>
     </div>
     <div class="dl">
       <a href="https://github.com/N2-O/cross-section/releases/latest">
-        <div class="k">Portable · 推荐</div>
-        <div class="n">便携版</div>
-        <div class="s">自带 Python 3.12 与全部依赖，解压双击 START.bat。不装 Python、不 pip、不联网。</div>
-        <div class="go">74.5 MB →</div>
+        <div class="k">Windows x64 · 推荐</div>
+        <div class="n">完整包</div>
+        <div class="s">解压双击 <code>START.bat</code>。首次启动自动装 Python 3.12 与全部依赖（走国内镜像，约 70 MB），之后秒开。不装 Python、不 pip、不需要管理员权限。</div>
+        <div class="go">4.7 MB →</div>
       </a>
       <a href="https://github.com/N2-O/cross-section/releases/latest">
-        <div class="k">Source</div>
-        <div class="n">源码版</div>
-        <div class="s">需要 Python 3.10+ 与 <code>pip install -r requirements.txt</code>。想改代码看这里。</div>
+        <div class="k">已有 Python 3.10+</div>
+        <div class="n">直接跑源码</div>
+        <div class="s">跳过自动装配：<code>pip install -r requirements.txt</code>，再 <code>python cs2tool/server.py --port 8790</code>。想改代码看这里。</div>
         <div class="go">4.7 MB →</div>
       </a>
     </div>
@@ -620,7 +620,7 @@ footer .cols p{margin:0}
         <a href="https://github.com/N2-O/cross-section/blob/main/LICENSE">MIT License</a><br>
         <a href="https://github.com/N2-O/cross-section/blob/main/DISCLAIMER.md">免责声明</a><br>
         <a href="https://github.com/N2-O/cross-section/blob/main/CHANGELOG.md">Changelog</a><br>
-        <span class="num" style="color:#3f3f42">v6.2.0 · 2026-10-24</span>
+        <span class="num" style="color:#3f3f42">v6.2.1 · 2026-10-24</span>
       </p>
     </div>
   </footer>

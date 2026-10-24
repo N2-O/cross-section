@@ -2,12 +2,18 @@
 title Cross-Section
 cd /d "%~dp0"
 
-REM ---- portable build: bundled Python, no system Python / no pip / no network needed ----
+REM ---- runtime: bundled, or auto-installed on first run (no system Python needed) ----
 if not exist "python\python.exe" (
-  echo [ERROR] Bundled Python missing: python\python.exe not found.
-  echo Re-extract the whole zip, do not copy partial folders.
-  pause
-  exit /b 1
+  echo.
+  echo [SETUP] Python runtime not found - installing now, one time only, about 70 MB.
+  echo.
+  call "%~dp0SETUP.bat"
+  if errorlevel 1 (
+    echo.
+    echo [ERROR] Runtime setup failed. See the messages above.
+    pause
+    exit /b 1
+  )
 )
 
 set PY=python\python.exe
