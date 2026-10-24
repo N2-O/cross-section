@@ -106,18 +106,28 @@ function Install-Python {
 # 精确文件名，与 awpy 3.1.1 的实际依赖树一致。
 # 不用「包名 + 版本号」去猜，是因为 PyPI 文件名会把连字符换成下划线
 # （polars-runtime-32 → polars_runtime_32），且空版本会抓到最老的一版。
-$Wheels = @(
-    'polars-2.0.0-py3-none-any.whl',
-    'polars_runtime_32-2.0.0-cp310-abi3-win_amd64.whl',
-    'awpy-3.1.1-cp312-cp312-win_amd64.whl',
-    'rich-15.0.0-py3-none-any.whl',
-    'typer-0.27.3-py3-none-any.whl',
-    'pygments-2.21.0-py3-none-any.whl',
-    'markdown_it_py-4.2.0-py3-none-any.whl',
-    'mdurl-0.1.2-py3-none-any.whl',
-    'annotated_doc-0.0.5-py3-none-any.whl',
-    'shellingham-1.5.4-py2.py3-none-any.whl'
-)
+#
+# 每个 wheel 配一个「装好后可 import 的模块名」，用于重跑时跳过已装的包
+# （装机几十秒，不该每次都重下）。空字符串表示没有对应模块名，按同组判断。
+$Wheels = [ordered]@{
+    'polars-2.0.0-py3-none-any.whl'                    = 'polars'
+    'polars_runtime_32-2.0.0-cp310-abi3-win_amd64.whl' = '_polars_runtime_32'
+    'awpy-3.1.1-cp312-cp312-win_amd64.whl'             = 'awpy'
+    'rich-15.0.0-py3-none-any.whl'                     = 'rich'
+    'typer-0.27.3-py3-none-any.whl'                    = 'typer'
+    'pygments-2.21.0-py3-none-any.whl'                 = 'pygments'
+    'markdown_it_py-4.2.0-py3-none-any.whl'            = 'markdown_it'
+    'mdurl-0.1.2-py3-none-any.whl'                     = 'mdurl'
+    'annotated_doc-0.0.5-py3-none-any.whl'             = 'annotated_doc'
+    'shellingham-1.5.4-py2.py3-none-any.whl'           = 'shellingham'
+    # 回放页（rounddata）与局内事件解析（awpy_ingest）都直接 import demoparser2，
+    # 它不在 awpy 的元数据依赖里，必须显式装，连它的四个依赖一起。
+    'demoparser2-0.42.0-cp312-cp312-win_amd64.whl'     = 'demoparser2'
+    'pandas-3.1.0-cp312-cp312-win_amd64.whl'           = 'pandas'
+    'numpy-2.5.4-cp312-cp312-win_amd64.whl'            = 'numpy'
+    'pyarrow-26.0.0-cp312-cp312-win_amd64.whl'         = 'pyarrow'
+    'tqdm-4.70.1-py3-none-any.whl'                     = 'tqdm'
+}
 
 $SimpleMirrors = @(
     'https://pypi.tuna.tsinghua.edu.cn/simple',
@@ -156,10 +166,28 @@ function Pick-WheelUrl($whl, $mirror) {
 function Install-Wheels {
     New-Item -ItemType Directory -Force -Path $Site | Out-Null
     $failed = @()
+    # 一次性问 python 已经装好了哪些包（一个包开一次 python 太慢）。
+    # find_spec 查可 import 的模块；_polars_runtime_32 这类没有模块名的，看目录。
+    $pyExe = Join-Path $PyDir 'python.exe'
+    $have = @()
+    if (Test-Path $pyExe) {
+        $mods = (($Wheels.Values | Where-Object { $_ }) -join ',')
+        $probe = 'import importlib.util as u,os,sys;site=sys.prefix+"\\Lib\\site-packages";' +
+                 'mods="' + $mods + '".split(",");' +
+                 'print(" ".join(m for m in mods if u.find_spec(m) or os.path.isdir(os.path.join(site,m))))'
+        $out = & $pyExe -c $probe 2>$null
+        if ($out) { $have = @($out -split '\s+' | Where-Object { $_ }) }
+    }
     $i = 0
-    foreach ($whl in $Wheels) {
+    $total = $Wheels.Count
+    foreach ($whl in $Wheels.Keys) {
         $i++
-        Step "依赖 $i/$($Wheels.Count)：$whl"
+        $mod = $Wheels[$whl]
+        if ($mod -and ($have -contains $mod)) {
+            Say ("  [{0}/{1}] 跳过 {2}（已装）" -f $i, $total, $whl) 'DarkGray'
+            continue
+        }
+        Step "依赖 $i/$total：$whl"
         $done = $false
         foreach ($m in $SimpleMirrors) {
             $rel = Pick-WheelUrl $whl $m
@@ -168,7 +196,7 @@ function Install-Wheels {
             $pkg = ($whl -split '-')[0]
             $abs = ([Uri]::new([Uri]"$m/$pkg/", $rel)).AbsoluteUri
             $dest = Join-Path $TmpDir $whl
-            Say ("  从 {0} 下载" -f ([Uri]$m).Host) 'DarkGray'
+            Say (("  从 {0} 下载" -f ([Uri]$m).Host)) 'DarkGray'
             if (Fetch @($abs) $dest $whl) {
                 Expand-Wheel $dest $Site
                 Say '  已解压到 site-packages' 'Green'
@@ -195,7 +223,7 @@ if (-not (Install-Python)) {
     exit 1
 }
 
-Step '第 2 步 / 2：解析依赖（约 60 MB）'
+Step '第 2 步 / 2：解析依赖（约 120 MB）'
 $bad = Install-Wheels
 if ($bad.Count -gt 0) {
     Say ''; Say ('!! 这些包没装上：' + ($bad -join '、')) 'Red'
@@ -203,15 +231,15 @@ if ($bad.Count -gt 0) {
     exit 1
 }
 
-# 自检：能 import awpy 才算真装好
+# 自检：能 import 解析链才算真装好（demoparser2 是回放页必需的，漏了就一起报出来）
 Step '自检'
 $py = Join-Path $PyDir 'python.exe'
-$chk = & $py -c "import awpy, polars; print('ok', awpy.__version__ if hasattr(awpy,'__version__') else '')" 2>&1
+$chk = & $py -c "import awpy, polars, demoparser2; print('ok', awpy.__version__ if hasattr(awpy,'__version__') else '')" 2>&1
 if ($LASTEXITCODE -ne 0) {
-    Say ('!! 装完了但 import awpy 失败：' + $chk) 'Red'
+    Say ('!! 装完了但 import 失败：' + $chk) 'Red'
     exit 1
 }
-Say ('  import awpy 成功：' + $chk) 'Green'
+Say ('  import awpy / polars / demoparser2 成功：' + $chk) 'Green'
 
 Remove-Item $TmpDir -Recurse -Force -ErrorAction SilentlyContinue
 Say ''
