@@ -306,7 +306,6 @@ function renderAll() {
   rEcon();
   rUtil();
   rReceived();
-  rPool();
   updateSideSel();
 }
 
@@ -759,20 +758,58 @@ if ($('#mxBtn')) $('#mxBtn').onclick = () => {
 };
 
 /* ================= 地图数据 ================= */
-function rMaps() {
-  const bm = S.overview.by_map || [];
-  const mx = Math.max(1, ...bm.map(x => x.matches || 0));
-  $('#mpTable').innerHTML = table([
-    { t: '地图', get: r => esc(mapCn(r.map)) },
-    { t: '场次', num: 1, get: r => `${r.matches} ${minibar(r.matches, mx)}` },
-    { t: '胜率', num: 1, get: r => `<span class="${r.win_rate >= 50 ? 'w' : 'l'}">${r.win_rate}%</span>` },
+/* ================= 地图（图池 + 逐图数据合并成一张表） ================= */
+async function rMaps() {
+  let pool = [];
+  try { pool = (await api('/api/v1/map_pool')).maps || []; } catch (e) { pool = []; }
+  const byMap = {};
+  (S.overview?.by_map || []).forEach(m => { byMap[m.map] = m; });
+  // 两张表的数据来源不同（图池来自 map_pool，逐图指标来自 overview.by_map），取并集
+  const names = [...new Set([...pool.map(p => p.map), ...Object.keys(byMap)])]
+    .sort((a, b) => {
+      const pa = (pool.find(x => x.map === a) || {}).played ?? (byMap[a]?.matches || 0);
+      const pb = (pool.find(x => x.map === b) || {}).played ?? (byMap[b]?.matches || 0);
+      return pb - pa || a.localeCompare(b);
+    });
+  const rows = names.map(name => {
+    const p = pool.find(x => x.map === name) || {};
+    const m = byMap[name] || {};
+    const played = p.played ?? m.matches ?? 0;
+    const rec = (p.win != null && p.loss != null) ? `${p.win}胜 ${p.loss}负` : '—';
+    let delta = '<span class="m">—</span>';
+    if (p.delta != null) {
+      if (p.delta === 0) delta = '<span class="m">持平</span>';
+      else delta = `<span class="${p.delta > 0 ? 'w' : 'l'}">${p.delta > 0 ? '▲ +' : '▼ '}${p.delta}pt</span>`;
+    }
+    const wr = p.win_rate ?? m.win_rate;
+    return {
+      map: esc(mapCn(name)),
+      played: played,
+      rec: `<span class="m">${rec}</span>`,
+      wr: wr == null ? '<span class="m">—</span>'
+                     : `<span class="${wr >= 50 ? 'w' : 'l'}">${wr}%</span>`,
+      delta: delta,
+      rounds: m.rounds ?? '—',
+      adr: num(m.adr, 1), kast: num(m.kast, 1), rating: num(m.rating, 2),
+      kd: num(m.kd, 2),
+      spent: m.spent_avg ? '$' + nth(m.spent_avg) : '—',
+    };
+  });
+  const el = $('#mpTable');
+  if (!el) return;
+  el.innerHTML = table([
+    { t: '地图', f: 'map' },
+    { t: '场次', f: 'played', num: 1 },
+    { t: '战绩', f: 'rec', num: 1 },
+    { t: '胜率', f: 'wr', num: 1 },
+    { t: '环比', f: 'delta', num: 1 },
     { t: '回合', f: 'rounds', num: 1, k: 'rounds_played' },
-    { t: 'ADR', get: r => num(r.adr, 1), num: 1, k: 'adr' },
-    { t: 'KAST', get: r => num(r.kast, 1), num: 1, k: 'kast' },
-    { t: 'Rating', get: r => num(r.rating, 2), num: 1, k: 'rating' },
-    { t: 'K/D', get: r => num(r.kd, 2), num: 1, k: 'kd' },
-    { t: '每回合花费', get: r => r.spent_avg ? '$' + nth(r.spent_avg) : '—', num: 1, k: 'spent_avg' },
-  ], bm);
+    { t: 'ADR', f: 'adr', num: 1, k: 'adr' },
+    { t: 'KAST', f: 'kast', num: 1, k: 'kast' },
+    { t: 'Rating', f: 'rating', num: 1, k: 'rating' },
+    { t: 'K/D', f: 'kd', num: 1, k: 'kd' },
+    { t: '每回合花费', f: 'spent', num: 1, k: 'spent_avg' },
+  ], rows);
 }
 
 /* ================= 经济 ================= */
@@ -949,37 +986,6 @@ function bindRecvSide() {
       rReceived();
     };
   });
-}
-
-/* ================= 图池 ================= */
-async function rPool() {
-  let pool = [];
-  try { pool = (await api('/api/v1/map_pool')).maps || []; } catch (e) { pool = []; }
-  const byMap = {};
-  (S.overview?.by_map || []).forEach(m => { byMap[m.map] = m; });
-  const rows = pool.map(p => {
-    const m = byMap[p.map] || {};
-    let delta = '<span class="m">—</span>';
-    if (p.delta != null) {
-      if (p.delta === 0) delta = '<span class="m">持平</span>';
-      else delta = `<span class="${p.delta > 0 ? 'w' : 'l'}">${p.delta > 0 ? '▲ +' : '▼ '}${p.delta}pt</span>`;
-    }
-    return {
-      map: esc(mapCn(p.map)), played: p.played, rec: `${p.win}胜 ${p.loss}负`,
-      wr: `<span class="${p.win_rate == null ? 'm' : (p.win_rate >= 50 ? 'w' : 'l')}">${p.win_rate == null ? '—' : p.win_rate + '%'}</span>`,
-      delta, adr: num(m.adr, 1), kast: num(m.kast, 1), rating: num(m.rating, 2),
-    };
-  });
-  $('#poolTable').innerHTML = table([
-    { t: '地图', f: 'map' },
-    { t: '游玩', f: 'played', num: 1 },
-    { t: '战绩', f: 'rec', num: 1 },
-    { t: '胜率', f: 'wr', num: 1 },
-    { t: '环比', f: 'delta', num: 1 },
-    { t: 'ADR', f: 'adr', num: 1, k: 'adr' },
-    { t: 'KAST', f: 'kast', num: 1, k: 'kast' },
-    { t: 'Rating', f: 'rating', num: 1, k: 'rating' },
-  ], rows);
 }
 
 /* ================= 图池 ================= */
