@@ -29,3 +29,11 @@ requirements.txt text eol=lf
 cs2tool/web/icons/**  linguist-vendored
 cs2tool/web/maps/**   linguist-vendored
 cs2tool/web/bg.jpg    linguist-vendored
+
+# ---- 发版包（git archive）里不要的东西 ----
+# 发布说明在各版本的 GitHub Release 页面上，程序目录里不需要副本；
+# CHANGELOG / requirements / .gitignore 都只是仓库内部用的。
+RELEASE_NOTES_*.md  export-ignore
+CHANGELOG.md        export-ignore
+requirements.txt    export-ignore
+.gitignore          export-ignore

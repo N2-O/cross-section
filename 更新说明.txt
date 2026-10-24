@@ -5,7 +5,7 @@ Cross-Section 更新说明
 --------
 从 GitHub Releases 下载新版本的整包，解压后替换旧的程序文件：
 
-    https://github.com/OWNER/cross-section/releases
+    https://github.com/N2-O/cross-section/releases
 
 替换时只覆盖程序本身（START.bat / check.bat / cs2tool\ 目录等），
 **保留 data\ 和 demos\** 两个目录 —— 那里是数据库和你拉下来的原始 demo，
