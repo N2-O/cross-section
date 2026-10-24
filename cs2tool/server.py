@@ -391,14 +391,13 @@ def api_update_check():
         status, loc = 0, ""
         try:
             # 不跟随跳转：3xx 在这里会抛 HTTPError，但 headers 里带着 Location
-            with urllib.request.build_opener(_NoRedirect).open(req, timeout=4) as r:
+            with urllib.request.build_opener(_NoRedirect).open(req, timeout=2) as r:
                 status, loc = r.status, r.headers.get("Location") or ""
         except urllib.error.HTTPError as e:
             if e.code in (301, 302, 303, 307, 308):
                 status = e.code                 # 3xx 是正常路径，不是错误
                 loc = (e.headers.get("Location") if e.headers else "") or ""
             elif e.code == 404:                 # 仓库不存在（或还没公开）：不缓存
-                print("[update_check] HTTP 404")
                 return {"ok": False, "error": "HTTP 404", **base}
             else:
                 raise
@@ -418,7 +417,6 @@ def api_update_check():
         return res
     except Exception as e:      # 网络 / DNS / 超时 / JSON / 404 全走这里
         reason = _err_brief(e)
-        print("[update_check] %s" % reason)
         return {"ok": False, "error": reason, **base}
 
 

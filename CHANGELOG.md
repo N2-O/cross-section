@@ -10,6 +10,8 @@
 - 首次装配补 `python-dateutil` / `six` / `tzdata`（pandas 的必需依赖，漏装会导致 `ImportError: Unable to import required dependency dateutil`）
 - 镜像顺序按实测带宽重排：腾讯 27 MB/s → 华为 15 MB/s → 清华 → 阿里 0.33 MB/s → 官方；原来阿里排第二，每个包都先落它，120 MB 要拖好几分钟
 - 包名取索引页时统一转成 PyPI 规范名（`python_dateutil` → `python-dateutil`），否则腾讯等严格镜像会 404
+- `START.bat` 里的中文注释改成英文：cmd 用 GBK 解码 UTF-8 中文会错断行，把注释当命令执行（报 `'灏变細鍚屾椂寮€涓や釜鏍囩鏂伴〉銆?' 不是内部或外部命令`）
+- `update_check` 超时 4s → 2s，失败彻底静默（原来每次启动会在控制台刷一行 `URLError: timed out`）
 
 ## v6.2.3 — 2026-10-24
 - 「地图数据」和「图池」合并成一张「地图」表，挪到页面最下面；去掉场次数字后面的小条
