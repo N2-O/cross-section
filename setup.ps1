@@ -172,9 +172,12 @@ function Install-Wheels {
     $have = @()
     if (Test-Path $pyExe) {
         $mods = (($Wheels.Values | Where-Object { $_ }) -join ',')
-        $probe = 'import importlib.util as u,os,sys;site=sys.prefix+"\\Lib\\site-packages";' +
-                 'mods="' + $mods + '".split(",");' +
-                 'print(" ".join(m for m in mods if u.find_spec(m) or os.path.isdir(os.path.join(site,m))))'
+        # 这段 python 代码里**不能出现双引号**：PowerShell 5.1 把含 " 的字符串
+        # 当参数传给原生 exe 时转义不可靠，python 会收到破碎的代码（File "<string>", line 1）。
+        # 所以路径用 os.path.join + 单引号，模块列表也用单引号包。
+        $probe = 'import importlib.util as u,os,sys;site=os.path.join(sys.prefix,''Lib'',''site-packages'');' +
+                 'mods=''' + $mods + '''.split('','');' +
+                 'print('' ''.join(m for m in mods if u.find_spec(m) or os.path.isdir(os.path.join(site,m))))'
         $out = & $pyExe -c $probe 2>$null
         if ($out) { $have = @($out -split '\s+' | Where-Object { $_ }) }
     }
