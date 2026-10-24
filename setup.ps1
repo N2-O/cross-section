@@ -20,25 +20,56 @@ $TmpDir = Join-Path $env:TEMP ('cs2tool_setup_' + [Guid]::NewGuid().ToString('N'
 function Say($msg, $color = 'Gray') { Write-Host $msg -ForegroundColor $color }
 function Step($msg) { Write-Host ''; Write-Host "== $msg" -ForegroundColor Cyan }
 
-# ---------------------------------------------------------------- 下载（多镜像回退）
+# ---------------------------------------------------------------- 下载（多镜像 · 双方法回退）
+$UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36'
+
+# 先 WebClient（速度快，DLL 体量大也能扛），再 Invoke-WebRequest（UA 更可控）
+function Try-Download($u, $dest) {
+    if (Test-Path $dest) { Remove-Item $dest -Force -ErrorAction SilentlyContinue }
+    try {
+        $wc = New-Object System.Net.WebClient
+        $wc.Headers['User-Agent'] = $UA
+        $wc.DownloadFile($u, $dest)
+        if ((Test-Path $dest) -and (Get-Item $dest).Length -gt 0) { return 'WebClient' }
+    } catch {
+        $script:lastErr = $_.Exception.Message
+    }
+    try {
+        Invoke-WebRequest -Uri $u -OutFile $dest -UseBasicParsing -TimeoutSec 600 -UserAgent $UA
+        if ((Test-Path $dest) -and (Get-Item $dest).Length -gt 0) { return 'Invoke-WebRequest' }
+    } catch {
+        $script:lastErr = $_.Exception.Message
+    }
+    return $null
+}
+
 function Fetch($urls, $dest, $label) {
     foreach ($u in $urls) {
         $host_ = ([Uri]$u).Host
-        try {
-            Say "  试 $host_ ..." 'DarkGray'
-            $sw = [Diagnostics.Stopwatch]::StartNew()
-            $wc = New-Object Net.WebClient
-            $wc.Headers.Add('User-Agent', 'Mozilla/5.0')
-            $wc.DownloadFile($u, $dest)
-            $sw.Stop()
+        Say "  试 $host_ ..." 'DarkGray'
+        $sw = [Diagnostics.Stopwatch]::StartNew()
+        $how = Try-Download $u $dest
+        $sw.Stop()
+        if ($how) {
             $mb = (Get-Item $dest).Length / 1MB
-            Say ("  OK  {0}  {1:N1} MB  {2:N1}s" -f $host_, $mb, $sw.Elapsed.TotalSeconds) 'Green'
+            Say ("  OK  {0}  {1:N1} MB  {2:N1}s  ({3})" -f $host_, $mb, $sw.Elapsed.TotalSeconds, $how) 'Green'
             return $true
-        } catch {
-            Say ("  失败 {0}: {1}" -f $host_, $_.Exception.Message) 'DarkYellow'
         }
+        $reason = if ($script:lastErr) { $script:lastErr } else { '未知原因' }
+        Say ("  失败 {0}: {1}" -f $host_, $reason) 'DarkYellow'
     }
     return $false
+}
+
+# Expand-Archive 只认 .zip 扩展名，wheel 本质是 zip 但会被扩展名挡住 → 先改名再解
+function Expand-Wheel($whlPath, $destDir) {
+    $tmpZip = $whlPath + '.zip'
+    Copy-Item -LiteralPath $whlPath -Destination $tmpZip -Force
+    try {
+        Expand-Archive -Path $tmpZip -DestinationPath $destDir -Force
+    } finally {
+        Remove-Item -LiteralPath $tmpZip -Force -ErrorAction SilentlyContinue
+    }
 }
 
 # ---------------------------------------------------------------- 1. Python embeddable
@@ -99,11 +130,21 @@ $SimpleMirrors = @(
 # 在 simple 索引页里按**确切文件名**找下载链接；包名取文件名第一个 '-' 之前那段
 function Pick-WheelUrl($whl, $mirror) {
     $pkg = ($whl -split '-')[0]
+    $url = "$mirror/$pkg/"
+    $html = $null
+    # 索引页也用双方法：部分镜像对 WebClient 的默认 UA 直接 403
     try {
-        $html = (New-Object Net.WebClient).DownloadString("$mirror/$pkg/")
+        $html = (Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 120 -UserAgent $UA).Content
     } catch {
-        return $null
+        try {
+            $wc = New-Object System.Net.WebClient
+            $wc.Headers['User-Agent'] = $UA
+            $html = $wc.DownloadString($url)
+        } catch {
+            return $null
+        }
     }
+    if (-not $html) { return $null }
     # href 形如 ../../packages/xx/yy/awpy-3.1.1-cp312-cp312-win_amd64.whl#sha256=...
     # 捕获组只吃到 .whl 为止（[^"#]* 不含 #），后面可能还有 #sha256 片段
     $pattern = 'href="([^"#]*' + [Regex]::Escape($whl) + ')'
@@ -129,7 +170,7 @@ function Install-Wheels {
             $dest = Join-Path $TmpDir $whl
             Say ("  从 {0} 下载" -f ([Uri]$m).Host) 'DarkGray'
             if (Fetch @($abs) $dest $whl) {
-                Expand-Archive -Path $dest -DestinationPath $Site -Force
+                Expand-Wheel $dest $Site
                 Say '  已解压到 site-packages' 'Green'
                 $done = $true
                 break
