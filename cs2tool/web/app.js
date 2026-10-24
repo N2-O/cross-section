@@ -743,10 +743,14 @@ async function rMaps() {
     const m = byMap[name] || {};
     const played = p.played ?? m.matches ?? 0;
     const rec = (p.win != null && p.loss != null) ? `${p.win}胜 ${p.loss}负` : '—';
-    let delta = '<span class="m">—</span>';
+    /* 环比 = 近段胜率 − 前段胜率（百分点）。这张图的对局按时间排序后从中间等分，
+       后一半减前一半；不足 4 场不给结论。悬停能看到具体是哪两段在比。 */
+    let delta = '<span class="m" title="这张图的已判定对局不足 4 场，切不出前后两段，所以不给环比">—</span>';
     if (p.delta != null) {
-      if (p.delta === 0) delta = '<span class="m">持平</span>';
-      else delta = `<span class="${p.delta > 0 ? 'w' : 'l'}">${p.delta > 0 ? '▲ +' : '▼ '}${p.delta}pt</span>`;
+      const seg = `前段 ${p.prev_n ?? '?'} 场 ${p.prev_wr ?? '?'}% → 近段 ${p.recent_n ?? '?'} 场 ${p.recent_wr ?? '?'}%`;
+      if (p.delta === 0) delta = `<span class="m" title="${seg}（胜率持平）">持平</span>`;
+      else delta = `<span class="${p.delta > 0 ? 'w' : 'l'}" title="${seg}　→　${p.delta > 0 ? '上升' : '下降'} ${Math.abs(p.delta)} 个百分点">` +
+                   `${p.delta > 0 ? '▲ +' : '▼ '}${p.delta}pt</span>`;
     }
     const wr = p.win_rate ?? m.win_rate;
     return {
@@ -769,7 +773,10 @@ async function rMaps() {
     { t: '场次', f: 'played', num: 1 },
     { t: '战绩', f: 'rec', num: 1 },
     { t: '胜率', f: 'wr', num: 1 },
-    { t: '环比', f: 'delta', num: 1 },
+    { t: '环比', f: 'delta', num: 1,
+      title: '近期进退。把这张图的对局按时间排序后从中间等分：近段胜率 − 前段胜率 = 环比（单位 pt，百分点）。'
+           + '例如前段 33.3% → 近段 66.7% 记作 +33.4pt。总数少于 4 场不给结论。'
+           + '注意它只看胜负，不含 ADR/Rating 这类个人表现，也不一定等于「近期」——切的是时间序前后两半。' },
     { t: '回合', f: 'rounds', num: 1, k: 'rounds_played' },
     { t: 'ADR', f: 'adr', num: 1, k: 'adr' },
     { t: 'KAST', f: 'kast', num: 1, k: 'kast' },

@@ -667,12 +667,14 @@ def map_pool(db_path: str) -> list[dict]:
         # 环比：按时间顺序把该图的对局分成「前段 / 近段」，各至少 2 场才给结论
         hist = [h for h in e["history"] if h["win"] is not None]
         e["recent_wr"] = e["prev_wr"] = e["delta"] = None
+        e["prev_n"] = e["recent_n"] = None
         if len(hist) >= 4:
             half = len(hist) // 2
             prev, recent = hist[:half], hist[half:]
             pw = round(100.0 * sum(h["win"] for h in prev) / len(prev), 1)
             rw = round(100.0 * sum(h["win"] for h in recent) / len(recent), 1)
             e["prev_wr"], e["recent_wr"] = pw, rw
+            e["prev_n"], e["recent_n"] = len(prev), len(recent)
             e["delta"] = round(rw - pw, 1)
         out.append(e)
     out.sort(key=lambda x: (-x["played"], x["map"]))
