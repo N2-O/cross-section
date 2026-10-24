@@ -2,6 +2,8 @@
 
 # Cross-Section
 
+**v6.2.0** · 修订于 2026-10-24 · [更新记录](CHANGELOG.md)
+
 **把每一场 CS2 对局切开，看横截面。**
 
 > [!WARNING]
@@ -21,7 +23,7 @@
 
 本地运行的 CS2 对局分析工具。把 `.dem` 丢进目录，它解析成可查的数据：能力画像、逐场趋势、武器与道具细节、残局与多杀、回合级回放。
 
-全部在你自己电脑上跑 —— **数据不上传、不需要账号、没有遥测**。唯一的对外请求是去 GitHub 问一句「有没有新版本」（见 [常见问题](#常见问题)）。
+全部在你自己电脑上跑 —— **数据不上传、不需要账号、没有遥测**。唯一的对外请求是去 GitHub 问一句「有没有新版本」（见 [常见问题](#常见问题)）。可选装一个 [AutoPull 增量包](#可选自动拉取官匹-demoautopull-增量包)，那部分的联网行为单独说明。
 
 <sub>Local CS2 demo analytics. Everything stays on your machine: no account, no upload, no telemetry.</sub>
 
@@ -99,11 +101,18 @@ python cs2tool/server.py --port 8790
 
 正式包里**不包含**这个功能。它需要借你本机 Steam 的登录态，属于可选件，所以单独发：
 
-1. 下载 `Cross-Section-AutoPull-v*.zip`
+1. 下载 `Cross-Section-AutoPull-v*.zip`（只有 8 KB）
 2. 解压到程序根目录（和 `START.bat` 同一层）
 3. 重启程序
 
-之后 Demo 页会多出「⇣ 从 Steam 拉新比赛」，设置页会多出拉取相关的配置。不想要了就删掉 `cs2tool/gc_pull.py` 再重启，界面自动收回。
+之后 Demo 页会多出 **AutoPull 区域**，两个功能：
+
+- **最近比赛** —— 一次取最近 8 场 + 每场的完整下载地址，库里已有的自动跳过
+- **按分享码指定场次** —— 粘分享码补任意早的场次（Valve 没有「给我更早的比赛」这种接口，所以只能一场一个码）
+
+**不需要任何配置**：不用 API Key、不用认证码、不用分享码起点了。它借本机已登录的 Steam 走 Steamworks 的本地接口，不要密码、也不读浏览器 cookie。**用之前要把 CS2 完全退出**（游戏占着 GC 会话）。
+
+不想要了就删掉 `cs2tool/gc_pull.py` 再重启，界面自动收回。
 
 原理、限制、风险声明都在压缩包里的 `AUTOPULL.md`，**装之前请读一遍**。
 

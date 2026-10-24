@@ -491,7 +491,7 @@ footer .cols p{margin:0}
       <div>
         <div class="n">03</div>
         <h4>放入录像</h4>
-        <p>把 <code>.dem</code> 放进 <code>demos/</code>；或在 Demo 页点「⇩ 从 CS2 拉取」从游戏目录自动复制；也可把目录指向同步盘。</p>
+        <p>把 <code>.dem</code> 放进 <code>demos/</code>；或在 Demo 页点「⇩ 从 CS2 拉取」从游戏目录自动复制；也可把目录指向同步盘。<strong>装了 AutoPull 增量包</strong>还能直接拉官匹录像（见下方下载区）。</p>
       </div>
       <div>
         <div class="n">04</div>
@@ -536,6 +536,7 @@ footer .cols p{margin:0}
       <div>
         <p><strong>不读游戏进程、不注入、不修改任何游戏文件。</strong>它跟 CS2 客户端之间没有交互——不读内存、不 hook、不改文件，所以不存在接触面。但账号状态不由它保证，反作弊策略也不由它控制。</p>
         <p>也不上传。程序只会发一个 GET 去 GitHub 公开 API 问「最新版本号是多少」——不带任何本地数据、不带 cookie、不含设备标识，返回结果只用来在版本号旁边显示一个 <code>NEW</code>。除此之外不往外发任何东西。</p>
+        <p><strong>唯一的例外是 AutoPull 增量包。</strong>它借本机已登录的 Steam 向 Game Coordinator 取你自己的比赛列表，首次使用还会从 GitHub 官方 release 下载 boiler-writter（约 800 KB）。<strong>这些都只在你装了那个包、按下按钮时发生</strong>——正式包不含这部分代码，也不带那个第三方 exe 和 Valve 的 dll。</p>
         <p>数据全部落在一个 SQLite 文件里。删掉程序目录就干净了——注册表、AppData、我的文档，什么都没有。</p>
       </div>
       <dl class="kv">
@@ -553,7 +554,7 @@ footer .cols p{margin:0}
     <div class="sec-h">
       <span class="idx">05</span>
       <h2>拿一个走</h2>
-      <span class="note">v6.2.0 · Windows x64</span>
+      <span class="note">v6.2.0 · 2026-10-24 · Windows x64</span>
     </div>
     <div class="dl">
       <a href="https://github.com/N2-O/cross-section/releases/latest">
@@ -569,6 +570,19 @@ footer .cols p{margin:0}
         <div class="go">4.7 MB →</div>
       </a>
     </div>
+
+    <div style="border:1px solid var(--line2);padding:24px 26px;margin-bottom:26px;display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+      <div style="flex:1 1 360px">
+        <div class="k" style="font-size:11px;letter-spacing:.16em;color:var(--dimmer);text-transform:uppercase">Optional · 增量包</div>
+        <div style="margin:10px 0 8px;font-size:19px;font-weight:620;letter-spacing:-.01em">AutoPull · 自动拉官匹 demo</div>
+        <div style="font-size:13.5px;line-height:1.85;color:var(--dim)">
+          解压到程序根目录即启用，<strong style="color:var(--ink)">不需要填任何配置</strong>。能取最近 8 场，也能按分享码补很久以前的场次。<br>
+          它要借本机已登录的 Steam 去问 Game Coordinator，所以单独发行——正式包里不含这部分。
+        </div>
+      </div>
+      <a class="btn" href="https://github.com/N2-O/cross-section/releases/latest">下载增量包</a>
+    </div>
+
     <p class="dl-notes">
       第一次启动会在程序目录下建 <code>demos/</code> 和 <code>data/</code>。把 <code>.dem</code> 丢进 <code>demos/</code>，在 Demo 页点「分析未处理」，等 8–15 秒。<br>
       升级：有新版本时版本号旁边会亮一个 <code>NEW</code>，点它去发布页。下载新包解压覆盖安装目录，<strong>但保留你自己的 <code>data/</code> 和 <code>demos/</code></strong>——解压到新目录再把旧 <code>data/</code> 搬过去最稳。
@@ -606,7 +620,7 @@ footer .cols p{margin:0}
         <a href="https://github.com/N2-O/cross-section/blob/main/LICENSE">MIT License</a><br>
         <a href="https://github.com/N2-O/cross-section/blob/main/DISCLAIMER.md">免责声明</a><br>
         <a href="https://github.com/N2-O/cross-section/blob/main/CHANGELOG.md">Changelog</a><br>
-        <span class="num" style="color:#3f3f42">v6.2.0</span>
+        <span class="num" style="color:#3f3f42">v6.2.0 · 2026-10-24</span>
       </p>
     </div>
   </footer>
