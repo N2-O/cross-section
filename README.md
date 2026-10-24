@@ -69,7 +69,7 @@ Cross-Section 做的事，是把这个账本翻成可读的东西 —— 而且�
 
 从 [Releases](../../releases/latest) 下载最新的 `Cross-Section-v*-Portable.zip`，解压到任意目录，双击 `START.bat`。
 
-自带 Python 3.12 运行时和全部依赖，**不需要装 Python、不需要 pip、不需要联网**。解压后约 500 MB，主要体积是 Python 运行时和依赖库。
+自带 Python 3.12 运行时和全部依赖，**不需要装 Python、不需要 pip、不需要联网**。zip 约 74.5 MB，解压后约 230 MB，主要体积是 Python 运行时和依赖库（polars 的二进制占大头）。
 
 ### 源码版
 

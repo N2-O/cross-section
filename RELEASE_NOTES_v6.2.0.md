@@ -23,8 +23,12 @@
 
 ## 装法
 
-- **全新**：下载便携版或源码版
+- **全新**：下载 `Cross-Section-v6.2.0-Portable.zip`（74.5 MB，自带 Python 与全部依赖）或 `Cross-Section-v6.2.0-src.zip`（源码，需要 Python 3.10+）
 - **覆盖升级**：保留你自己的 `data/` 与 `demos/`。旧版残留的 `cs2tool/check_pull.py`、`cs2tool/cs2_pull_new.py` 已无用处，可手动删掉
 - **增量包**：解压 `Cross-Section-AutoPull-v6.2.0.zip` 到程序根目录即可启用，删 `cs2tool/gc_pull.py` 即撤销
 
-> 这次没有重打便携包（需要 Windows 运行时）。已有 v6.1 便携版的话，把源码包里的 `cs2tool/` 整个覆盖进去即可。
+## 关于这次的便携包
+
+这一版便携包是在 Linux 服务器上**交叉组装**的：Python 3.12.10 embeddable（华为云镜像）+ awpy/polars 等 10 个 `win_amd64` wheel（清华镜像）解压进 `python/Lib/site-packages`，并写好了 `python312._pth`。
+
+结构自检都过了（`python.exe`、`awpy/_awpy.cp312-win_amd64.pyd`、`_polars_runtime_32/_polars_runtime.pyd` 均在位），但**没有在 Windows 真机上跑过**。如果 `START.bat` 报「Bundled Python cannot import awpy」或别的启动错误，用源码版先顶上，同时把报错贴到 Issue，我按反馈重打。
