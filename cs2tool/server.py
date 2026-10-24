@@ -22,7 +22,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
 
-VERSION = "6.2.3"
+VERSION = "6.2.4"
 # 开源发布仓库（检查新版本用）
 REPO_SLUG = "N2-O/cross-section"
 RELEASES_URL = f"https://github.com/{REPO_SLUG}/releases"
@@ -820,54 +820,6 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(*_json(_detect_cs2()))
             if path == "/api/scan":
                 return self._send(*_json(api_scan()))
-            if path == "/api/relink":
-                # 手动触发：按文件名把 demos 和 matches 接回去（列表横线的急救）
-                with _lock:
-                    n = store2.relink_demos(_conn, _cfg_steamid())
-                    _conn.commit()
-                return self._send(*_json({"ok": True, "relinked": n}))
-            if path == "/api/diag_demos":
-                # 排查「列表全是横线」：横线 = me_* 全空，说明 demos→matches→pms 这条链断了。
-                # 这里把每一环都摊出来，一眼看出断在哪。
-                _rows = _conn.execute(
-                    """SELECT d.id, d.name, d.analyzed, d.match_id, d.error,
-                              m.id AS m_id, m.my_steamid, m.map AS m_map,
-                              (SELECT COUNT(*) FROM pms p WHERE p.match_id=d.match_id) AS pms_rows,
-                              (SELECT COUNT(*) FROM pms p WHERE p.match_id=d.match_id
-                                 AND p.steamid=m.my_steamid) AS my_pms_rows,
-                              (SELECT GROUP_CONCAT(p.steamid, ',') FROM
-                                 (SELECT steamid FROM pms WHERE match_id=d.match_id
-                                  ORDER BY steamid LIMIT 3) p) AS pms_sample
-                       FROM demos d LEFT JOIN matches m ON m.id=d.match_id
-                       ORDER BY d.id""").fetchall()
-                _cfg_sid = str(_cfg_steamid() or "")
-                _out = []
-                for _r in _rows:
-                    _d = dict(_r)
-                    _ms = _d.get("my_steamid")
-                    # 三种 steamid 摆一起，一眼看出对不上的是哪个
-                    _d["settings_steamid"] = _cfg_sid
-                    _d["my_steamid_match"] = ("一致" if _ms and _cfg_sid
-                                             and str(_ms) == _cfg_sid else "不一致")
-                    if not _d.get("match_id"):
-                        _d["verdict"] = "match_id 为空：解析后没写回 demos 表（mark_analyzed 没跑）"
-                    elif not _d.get("m_id"):
-                        _d["verdict"] = "match_id 指向的 match 不存在（断链）"
-                    elif not _ms:
-                        _d["verdict"] = "matches.my_steamid 为空，JOIN 不到 pms"
-                    elif not _d.get("my_pms_rows"):
-                        _d["verdict"] = ("pms 里没有我这行（库里存的是 "
-                                         f"{_d.get('pms_sample') or '无'}，设置里是 "
-                                         f"{_cfg_sid or '空'}）")
-                    else:
-                        _d["verdict"] = "正常"
-                    _out.append(_d)
-                _bad = [x for x in _out if x["verdict"] != "正常"]
-                return self._send(*_json({"ok": True, "version": VERSION,
-                                          "db": os.path.join(DATA_DIR, "cs2.db"),
-                                          "settings_steamid": _cfg_sid,
-                                          "total": len(_out), "bad": len(_bad),
-                                          "demos": _out}))
             if path == "/api/pull":
                 return self._send(*_json(api_pull()))
             if path == "/api/http_pull_progress":
@@ -1192,14 +1144,19 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(*_json({"ok": True, "file": os.path.basename(fp),
                                           "v": int(time.time())}))
             if u.path == "/api/export":
-                import export_report
+                # 一份自包含 CSV：注释头里就写着「给 AI 的指令」+ 字段口径，
+                # 后面是汇总行与逐场明细。丢给任何 AI 都能直接开始分析。
+                import export_csv
                 me = _me(_conn)
                 if not me:
                     return self._send(*_json({"ok": False, "error": "还没确定玩家身份"}))
                 out = os.path.join(DATA_DIR, "exports")
-                r = export_report.build(_conn, me, out)
+                os.makedirs(out, exist_ok=True)
+                fn = "cs2_export_%s.csv" % time.strftime("%Y%m%d_%H%M%S")
+                export_csv.write_csv(DB_PATH, os.path.join(out, fn))
                 _open_folder(out)
-                return self._send(*_json(r))
+                return self._send(*_json({"ok": True, "dir": out, "file": fn,
+                                          "size": os.path.getsize(os.path.join(out, fn))}))
             if u.path == "/api/open_data":
                 _open_folder(DATA_DIR)
                 return self._send(*_json({"ok": True}))

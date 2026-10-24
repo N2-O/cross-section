@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.2.4 — 2026-10-24
+- 导出收敛成**一份自包含 CSV**：注释头里写着「给 AI 的指令」（水平定位/强项短板/阵营差异/地图特征/对枪经济/改进建议，外加防误读与防编造的硬性要求）与字段口径，后面接汇总行和逐场明细；丢给任何 AI 都能直接开始分析
+- 删 `export_report.py`（280 行）—— md/json 那条线不再需要
+- 删两个调试入口：Demo 页的「诊断」「重新关联」按钮及其后端路由（`/api/diag_demos`、`/api/relink`）。`store2.relink_demos()` 保留，扫描目录时仍会自动重连
+- 删 `app.js` 里 `/api/recompute` 的死绑定（按钮和后端都不存在）
+- 发版包不再带 `RELEASE_NOTES_*.md` / `CHANGELOG.md` / `requirements.txt` / `.gitignore`
+- 修 `check.bat` 指向已废弃的 `.venv`；修 `更新说明.txt` 里的 OWNER 占位符
+
 ## v6.2.3 — 2026-10-24
 - 「地图数据」和「图池」合并成一张「地图」表，挪到页面最下面；去掉场次数字后面的小条
 - 修 Demo 页切换玩家没反应：SteamID64 被 `Number()` 截断成错误值（`…031` → `…030`），后端查不到这个人就静默拒绝

@@ -1040,8 +1040,25 @@ async function pollJob() {
     } catch (e) { clearInterval(t); }
   }, 1200);
 }
-const exportCsv = () => { location.href = '/api/export/csv'; };
-if ($('#btnExport')) $('#btnExport').onclick = exportCsv;
+/* 导出：一份自包含 CSV（注释头带「给 AI 的指令」与字段口径 + 汇总行 + 逐场明细），
+   生成到数据目录的 exports/ 并打开文件夹。 */
+const exportAll = async () => {
+  hint('正在生成…');
+  let r = null;
+  try {
+    r = await post('/api/export', {});
+  } catch (e) {
+    hint('导出失败：' + String(e), false);
+    return;
+  }
+  if (r && r.ok) {
+    const kb = r.size ? (r.size / 1024).toFixed(0) + ' KB' : '';
+    hint('已生成 ' + (r.file || 'CSV') + (kb ? '（' + kb + '）' : ''), true);
+  } else {
+    hint((r && r.error) || '导出失败', false);
+  }
+};
+if ($('#btnExport')) $('#btnExport').onclick = exportAll;
 
 /* 数据操作（在设置弹层里） */
 if ($('#btnScan')) $('#btnScan').onclick = async () => {
@@ -1055,12 +1072,8 @@ if ($('#btnAnalyze')) $('#btnAnalyze').onclick = async () => {
   const r = await post('/api/analyze', {});
   if (r.ok) pollJob(); else hint(r.error || '失败');
 };
-if ($('#btnRecompute')) $('#btnRecompute').onclick = async () => {
-  hint('重算评分…');
-  const r = await post('/api/recompute', {});
-  hint(r.ok ? `已重算 ${r.rows} 行` : (r.error || '失败'), r.ok);
-  load();
-};
+/* 导出 AI 可读报告：Markdown（人看/AI 读）+ JSON（结构化），里面连字段口径都写了，
+   可以直接丢给 AI 分析。后端生成到数据目录的 exports/ 并自动打开文件夹。 */
 if ($('#btnReparse')) $('#btnReparse').onclick = async () => {
   if (!confirm('重新解析全部 demo？\n\n会清空现有分析结果并重新解析，每场约 8 秒。')) return;
   hint('重新解析中…');

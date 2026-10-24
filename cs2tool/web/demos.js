@@ -458,6 +458,7 @@ $('#btnReparse').onclick = async () => {
 };
 $('#btnExportCsv').onclick = () => { location.href = '/api/export/csv'; };
 
+
 // 全部删除：后端 /api/reset_all 清 16 张表 + 回放缓存 + 导出报告 + 设置，
 // 再重新扫描 demo 目录。demo 原始文件不动，但要重新分析。
 // 二次确认要求手打 DELETE——点错一次的代价是几十分钟的解析。
