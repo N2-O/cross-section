@@ -21,7 +21,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
 
-VERSION = "6.1.1"
+VERSION = "6.2.0"
 # 开源发布仓库（检查新版本用）
 REPO_SLUG = "N2-O/cross-section"
 RELEASES_URL = f"https://github.com/{REPO_SLUG}/releases"
@@ -289,6 +289,8 @@ def api_state():
                 "overview": ov, "job": dict(_jobs),
                 "settings": S.load(),
                 "version": VERSION,
+                # 拉取功能是否存在：取决于有没有解压 AutoPull 增量包（cs2tool/gc_pull.py）
+                "gc_pull": _gc_pull_module() is not None,
                 "paths": {"demos": DEMO_DIR, "data": DATA_DIR,
                           "db": os.path.join(DATA_DIR, "cs2.db"),
                           "overviews": OVERVIEW_DIR,
@@ -560,6 +562,38 @@ def api_pull():
 _http_pull = {"running": False, "total": 0, "done": 0, "current": "",
               "bytes": 0, "bytes_total": 0, "error": None,
               "ok_count": 0, "fail_count": 0, "errors": []}
+
+
+def _gc_pull_module():
+    """AutoPull 增量包提供的模块。主程序里**没有**这个文件，所以这个功能默认不存在。
+
+    增量包解压到程序根目录后会多出 cs2tool/gc_pull.py，这里就能 import 到。
+    故意做成「存在才启用」：正式包里不含任何借 Steam 登录态的代码。
+    """
+    p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gc_pull.py")
+    if not os.path.isfile(p):
+        return None
+    try:
+        import gc_pull  # noqa: F401
+        return gc_pull
+    except Exception:
+        return None
+
+
+def api_gc_pull():
+    mod = _gc_pull_module()
+    if mod is None:
+        return {"ok": False, "need_patch": True,
+                "error": "这个功能需要「AutoPull 增量包」：把包解压到程序根目录后重启即可"}
+    mod.log = None
+    try:
+        r = mod.fetch(DATA_DIR, log=lambda s: print("[autopull]", s, flush=True))
+    except Exception as e:
+        return {"ok": False, "error": "AutoPull 出错：%s" % e}
+    if not r.get("ok"):
+        return r
+    print("[autopull] 拿到 %d 场，%d 场可下载" % (len(r["matches"]), len(r["urls"])), flush=True)
+    return r
 
 
 def api_http_pull(items=None):
@@ -1133,6 +1167,9 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/api/playdemo":
                 # 生成 playdemo 命令用的；顺带把 demo 放进 CS2 的 csgo 目录
                 return self._send(*_json(api_playdemo(payload.get("name"))))
+            if u.path == "/api/gc_pull":
+                # 借本机 Steam 登录态取比赛列表（需要 AutoPull 增量包，主包没有这个文件）
+                return self._send(*_json(api_gc_pull()))
             if u.path == "/api/http_pull":
                 # 直接走 Valve 的 demo CDN 下载（绕开 CS2 客户端）。
                 # urls = 从比赛历史页复制来的链接；codes = 上次清单（只能定位比赛，拼不出地址）

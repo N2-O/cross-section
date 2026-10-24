@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+  .wrap { font-family: inherit; color: var(--foreground); max-width: 780px; }
+  h2 { font-size: 15px; font-weight: 600; margin: 0 0 4px; letter-spacing: .01em; }
+  .sub { font-size: 12px; color: var(--muted-foreground); margin: 0 0 18px; }
+  .row-label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+               color: var(--muted-foreground); margin: 0 0 6px; }
+  .bits { display: flex; gap: 3px; margin-bottom: 6px; }
+  .blk { position: relative; padding: 14px 10px 12px; border-radius: 3px;
+         text-align: center; font-size: 13px; line-height: 1.35;
+         border: 1px solid var(--border); }
+  .blk .n { display: block; font-size: 10px; letter-spacing: .06em;
+            color: var(--muted-foreground); margin-top: 4px; }
+  .have { background: color-mix(in srgb, var(--accent) 14%, transparent);
+          border-color: color-mix(in srgb, var(--accent) 42%, transparent); }
+  .have2 { background: color-mix(in srgb, var(--accent) 26%, transparent);
+           border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+  .miss { background: repeating-linear-gradient(45deg,
+            color-mix(in srgb, #c8443a 16%, transparent) 0 6px,
+            transparent 6px 12px);
+          border-color: #c8443a; color: #b8342b; font-weight: 600; }
+  .gap { height: 22px; }
+  .num { font-size: 26px; font-weight: 600; letter-spacing: -.01em; }
+  .foot { display: flex; gap: 26px; margin-top: 20px; padding-top: 14px;
+          border-top: 1px solid var(--border); font-size: 12px;
+          color: var(--muted-foreground); }
+  .foot b { color: var(--foreground); font-weight: 600; }
+  .src { margin-top: 16px; font-size: 12.5px; line-height: 1.9; }
+  .src div { display: flex; gap: 10px; }
+  .src .k { min-width: 178px; color: var(--muted-foreground); }
+  .ok { color: #3f8f5f; }
+  .no { color: #b8342b; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h2>分享码 144 位里装了什么</h2>
+  <p class="sub">CSGO-peXk7-nC3pz-5Sn7e-bYjFC-bxfvN · 18 字节</p>
+
+  <div class="bits">
+    <div class="blk have" style="flex:8">match_id<span class="n">64 位 · b[0:8]</span></div>
+    <div class="blk have2" style="flex:8">outcome_id<span class="n">64 位 · b[8:16]</span></div>
+    <div class="blk miss" style="flex:2">token<span class="n">只有 16 位</span></div>
+  </div>
+
+  <div class="gap"></div>
+
+  <p class="row-label">demo 文件名实际需要的</p>
+  <div class="bits">
+    <div class="blk have2" style="flex:8">outcome_id<span class="n">21 位十进制 · 码里有</span></div>
+    <div class="blk have" style="flex:2">token 低 16<span class="n">码里有</span></div>
+    <div class="blk miss" style="flex:2">token 高 16<span class="n">码里没有</span></div>
+  </div>
+
+  <div class="gap"></div>
+  <p class="row-label">缺口的量级</p>
+  <div class="num">32,768 种可能</div>
+  <p class="sub" style="margin:6px 0 0">token 是 32 位，最高位恒 0 → 未知 15 位 = 2<sup>15</sup></p>
+
+  <div class="foot">
+    <span>已知 <b>128 / 144</b> 位</span>
+    <span>定位缺口 <b>16</b> 位</span>
+    <span>文件名 <b>21 + 10</b> 位十进制</span>
+  </div>
+
+  <div class="src">
+    <div><span class="k">Game Coordinator（boiler-writter）</span><span class="ok">✓ 给完整 demoUrl · 用本机 Steam 登录态，不要密码</span></div>
+    <div><span class="k">比赛历史页</span><span class="ok">✓ 页面上就是完整链接</span><span class="no">· 实测 302 要登录</span></div>
+    <div><span class="k">Steam Web API</span><span class="no">✗ 只有 nextcode，其余方法全 404</span></div>
+    <div><span class="k">从码推算</span><span class="no">✗ 哈希/位运算/高低 32 位全试过，无派生关系</span></div>
+  </div>
+</div>
+</body>
+</html>

@@ -1101,7 +1101,11 @@ function openSettings() {
   if ($('#setDemos')) $('#setDemos').value = st.demos_dir || p.demos || '';
   if ($('#setData')) $('#setData').value = st.data_dir || p.data || '';
   if ($('#setCs2')) $('#setCs2').value = st.cs2_dir || '';
-  // Steam 自动拉取：没这几项，/api/pull_new 会返回 need_setup 并列出缺哪个
+  // Steam 自动拉取：这一段只在解压了 AutoPull 增量包时才有意义（后端没那个模块就整块藏掉）
+  const gcOn = S.gc_pull === true;
+  if ($('#steamCfg')) $('#steamCfg').hidden = !gcOn;
+  if ($('#steamOff')) $('#steamOff').hidden = gcOn;
+  // 元素即使隐藏也仍在 DOM 里，保存时照样读得到值，不会把已填的配置清空
   if ($('#setKey')) $('#setKey').value = st.steam_api_key || '';
   if ($('#setAuth')) $('#setAuth').value = st.steam_auth_code || '';
   if ($('#setSid')) $('#setSid').value = st.steamid || '';

@@ -110,7 +110,8 @@
     <div class="card"><div class="bd">
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button id="btnPull">⇩ 从 CS2 拉取</button>
-        <button id="btnPullNew" title="按 Steam 账号设置，从比赛历史里找还没下载的对局">⇣ 从 Steam 拉新比赛</button>
+        <!-- 默认隐藏：只有装了 AutoPull 增量包（后端 /api/state 的 gc_pull=true）才显示 -->
+        <button id="btnPullNew" hidden title="从 Game Coordinator 取最近比赛并直接下载">⇣ 从 Steam 拉新比赛</button>
         <button id="btnScan">扫描目录</button>
         <button id="btnAnalyze">分析未处理</button>
         <button id="btnReparse" title="把所有 demo 从头重新解析一遍（清空现有分析结果）">⟲ 全部重新解析</button>

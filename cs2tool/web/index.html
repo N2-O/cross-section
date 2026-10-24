@@ -461,28 +461,38 @@
       <label class="fld"><span>数据目录</span>
         <div class="row"><input id="setData" spellcheck="false"></div></label>
 
-      <div class="msec">Steam 账号 · 自动拉取官匹 demo</div>
-      <label class="fld"><span>Steam Web API Key</span>
-        <div class="row"><input id="setKey" type="password" spellcheck="false" placeholder="32 位十六进制"></div>
-        <small>去 <a href="https://steamcommunity.com/dev/apikey" target="_blank" rel="noopener"><code>steamcommunity.com/dev/apikey</code></a> 生成，域名填 <code>localhost</code>。只读权限，不能登录或交易。</small></label>
-      <label class="fld"><span>游戏认证码</span>
-        <div class="row"><input id="setAuth" spellcheck="false" placeholder="例如 ABCD1-23456-7890A"></div>
-        <small>去 <a href="https://help.steampowered.com/zh-cn/wizard/HelpWithGameIssue/?appid=730&issueid=128" target="_blank" rel="noopener"><code>https://help.steampowered.com/zh-cn/wizard/HelpWithGameIssue/?appid=730&amp;issueid=128</code></a><br>
-        （需先登录 Steam，页面标题 Game Authentication Codes）→ 点 <b>Create Authentication Code</b> → 得到 <code>XXXX-XXXXX-XXXX</code>。<br>
-        只能读比赛历史，不能登录、不能交易；<b>有效期约 24 小时</b>，过期回这页重点一次。</small></label>
+      <div class="msec">Steam 账号</div>
       <label class="fld"><span>SteamID64</span>
         <div class="row"><input id="setSid" spellcheck="false" placeholder="7656119…　也可以直接粘 steamcommunity.com/profiles/… 链接"></div>
         <small>可以直接粘贴个人资料链接（会自动取出数字）。<b>它决定哪些比赛算「你的」</b>，没有它分不出队友/敌人。</small></label>
-      <label class="fld"><span>已处理到的分享码</span>
-        <div class="row"><input id="setStart" spellcheck="false" placeholder="CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx　粘分享链接也行"></div>
-        <small>同一个页面上「你最近完成的比赛令牌」就是它。也可以从 CS2 里 <b>Watch → Your Matches</b> 拷。拉取脚本从这里往后找新比赛，每跑一次自动推进。<br>
-        <b>必须是最近一个月内的</b>——Steam 只接受一个月内的分享码当起点。<b>只能往后拉</b>，Steam 没有反方向的接口。</small></label>
-      <label class="fld"><span>自动检查</span>
-        <div class="row" style="gap:8px;align-items:center">
-          <input id="setAutoPull" type="number" min="0" max="72" step="1" value="0" style="flex:0 0 80px">
-          <span style="font-size: 13px;color:var(--dim)">小时一次，0 = 关闭</span>
-        </div>
-        <small>到点自动跑一次拉取，有新比赛会生成下载清单并在 Demo 页显示。<b>不会自动启动 CS2</b>。</small></label>
+
+      <div id="steamCfg" hidden>
+        <div class="msec">自动拉取官匹 demo · 需要 AutoPull 增量包</div>
+        <label class="fld"><span>Steam Web API Key</span>
+          <div class="row"><input id="setKey" type="password" spellcheck="false" placeholder="32 位十六进制"></div>
+          <small>去 <a href="https://steamcommunity.com/dev/apikey" target="_blank" rel="noopener"><code>steamcommunity.com/dev/apikey</code></a> 生成，域名填 <code>localhost</code>。只读权限，不能登录或交易。</small></label>
+        <label class="fld"><span>游戏认证码</span>
+          <div class="row"><input id="setAuth" spellcheck="false" placeholder="例如 ABCD1-23456-7890A"></div>
+          <small>去 <a href="https://help.steampowered.com/zh-cn/wizard/HelpWithGameIssue/?appid=730&amp;issueid=128" target="_blank" rel="noopener"><code>https://help.steampowered.com/zh-cn/wizard/HelpWithGameIssue/?appid=730&amp;issueid=128</code></a><br>
+          （需先登录 Steam，页面标题 Game Authentication Codes）→ 点 <b>Create Authentication Code</b> → 得到 <code>XXXX-XXXXX-XXXX</code>。<br>
+          只能读比赛历史，不能登录、不能交易；<b>有效期约 24 小时</b>，过期回这页重点一次。</small></label>
+        <label class="fld"><span>已处理到的分享码</span>
+          <div class="row"><input id="setStart" spellcheck="false" placeholder="CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx　粘分享链接也行"></div>
+          <small>旧分享码链路的起点，只在没有 AutoPull 增量包时才会用到。<b>必须是最近一个月内的</b>，且只能往后拉。</small></label>
+        <label class="fld"><span>自动检查</span>
+          <div class="row" style="gap:8px;align-items:center">
+            <input id="setAutoPull" type="number" min="0" max="72" step="1" value="0" style="flex:0 0 80px">
+            <span style="font-size: 13px;color:var(--dim)">小时一次，0 = 关闭</span>
+          </div>
+          <small>到点自动跑一次拉取，有新比赛会生成下载清单并在 Demo 页显示。<b>不会自动启动 CS2</b>。</small></label>
+      </div>
+
+      <div id="steamOff" hidden>
+        <div class="msec">自动拉取官匹 demo</div>
+        <small style="display:block;line-height:1.85">未安装 <b>AutoPull 增量包</b>。<br>
+        把包解压到程序根目录（和 <code>START.bat</code> 同级）再重启一次，这里就会出现拉取相关配置。<br>
+        这个功能借本机 Steam 的登录态向 Game Coordinator 请求比赛列表，属于可选功能，所以不放进正式包。</small>
+      </div>
 
       <div class="msec">数据</div>
       <label class="fld"><span>玩家最少场次</span>

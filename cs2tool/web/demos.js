@@ -68,6 +68,9 @@ async function load() {
   S = await api('/api/state');
   const dv = $('#dver');
   if (dv) dv.textContent = S.version ? 'v' + S.version : 'v?（后端未重启）';
+  // 拉取按钮只在装了 AutoPull 增量包时出现；没装就完全不露出来
+  const btnPull = $('#btnPullNew');
+  if (btnPull) btnPull.hidden = S.gc_pull !== true;
   renderPlayers();
   // 两个路径都显示：出问题时用户能直接找到 db 文件，不用猜
   const _dp = S.paths?.demos || '', _db = S.paths?.db || '';
@@ -297,92 +300,46 @@ $('#btnPullNew').onclick = async () => {
   const b = $('#btnPullNew');
   const old = b.textContent;
   b.disabled = true;
-  b.textContent = '查询中…';
+  b.textContent = '请求中…';
   hidePull();
-  let pv = {};
+
+  // 拉取走「AutoPull 增量包」：借本机 Steam 登录态向 GC 要比赛列表。
+  // 主程序里没有那个模块，会返回 need_patch —— 正式包不含任何碰 Steam 的代码。
+  let gc = {};
   try {
-    pv = await post('/api/pull_preview', {});
+    gc = await post('/api/gc_pull', {});
   } catch (e) {
-    pv = { ok: false, error: String(e) };
+    gc = { ok: false, error: String(e) };
   }
   b.disabled = false;
   b.textContent = old;
 
-  const PH = { steam_api_key: 'Steam Web API Key', steam_auth_code: '游戏认证码',
-               steamid: 'SteamID64', start_code: '已处理到的分享码',
-               'cs2_pull_new.py': '拉取脚本' };
-  if (pv.need_setup) {
-    const miss = (pv.missing || []).map(k => PH[k] || k).join('、');
-    hint(`需要先配置：${miss}　→ 回主页点右上角「⚙ 设置」`, false);
+  if (gc.need_patch) {
+    hint('拉取功能需要「AutoPull 增量包」—— 解压到程序根目录后重启一次即可启用', false);
     return;
   }
-  // 四种结果分开说：网络不通 / 查询失败 / 确实没有新的 / 有 N 场
-  if (pv.status === 'offline') {
-    hint(`网络不通：${pv.error || '连不上 Steam API（直连和代理都试过）'}`, false);
-    checkPull();                 // 自动跑一遍自检，别让人自己去命令行查
-    return;
-  }
-  if (pv.status === 'error' || !pv.ok) {
-    hint(`查询失败：${pv.error || '未知原因'}`, false);
-    checkPull();
-    return;
-  }
-  if (!pv.count) {
-    // 没有新比赛：但可能还留着升级前没下成的清单，先试那批（codes 存在 pull_last 里）
-    const hp2 = await post('/api/http_pull', {});
-    if (hp2.ok) {
-      hint(`没有新比赛，但有 ${hp2.total} 场待下载，开始下载…`);
-      showPull();
-      httpPullWatch();
-      return;
-    }
-    hint('没有新比赛（已是最新的）', true);
+  if (!gc.ok) {
+    hint(gc.error || '取比赛列表失败', false);
     return;
   }
 
-  // 先把场数报出来，让用户决定要不要拉
-  const head = pv.codes.slice(0, 6).join('\n');
-  const more = pv.count > 6 ? `\n… 还有 ${pv.count - 6} 场` : '';
-  if (!confirm(`发现 ${pv.count} 场新比赛：\n\n${head}${more}\n\n` +
-               '直接用工具下载？（走断点续传，可关掉页面；每场 150-250 MB）')) {
-    hint(`已取消，保留 ${pv.count} 场在待拉队列`);
-    return;
-  }
+  // 只下库里还没有的场次
+  const have = (S.demos || []).map(d => String(d.name || ''));
+  const urls = (gc.urls || []).filter(u => {
+    const body = u.split('/730/')[1].replace(/\.dem\.bz2$/, '');
+    return !have.some(n => n.includes(body));
+  });
 
-  const r = await post('/api/pull_new', {});
-  if (!r.ok) {
-    if (r.need_setup) {
-      const miss = (r.missing || []).map(k => PH[k] || k).join('、');
-      hint(`需要先配置：${miss}`, false);
-      return;
-    }
-    hint(r.error || '启动失败', false);
-    return;
-  }
-  // 清单已记下（start_code 也推进了）。但下载地址的后半段不在分享码里，
-  // 只能从比赛历史页取 —— 那页要登录，工具拿不到，所以让用户贴一次。
-  const pasted = prompt(
-    `发现 ${pv.count} 场新比赛，清单已记下。\n\n` +
-    '下载地址要登录 Steam 才看得到，麻烦你贴一下：\n' +
-    '1) 打开  steamcommunity.com/my/gcpd/730/?tab=matchhistorycompetitive\n' +
-    '2) 按 Ctrl+U 看源码 → Ctrl+A 全选 → Ctrl+C\n' +
-    '3) 粘到下面（只粘 demo 链接也行，一行一条）', '');
-  if (!pasted) { hint('清单已保存，下次点这里还能继续下', false); return; }
-
-  const re = /(?:https?:\/\/)?(replay\d+\.valve\.net)\/730\/(\d+_\d+)\.dem\.bz2/g;
-  // 按「比赛标识」去重：同一场可能出现在不同分片域名下，下一份就够
-  const seen = new Set();
-  const urls = [];
-  for (const m of pasted.matchAll(re)) {
-    const body = m[2];
-    if (seen.has(body)) continue;
-    seen.add(body);
-    urls.push(`http://${m[1]}/730/${body}.dem.bz2`);
-  }
   if (!urls.length) {
-    hint('粘进来的内容里没找到 demo 链接（要含 replay*.valve.net/730/…dem.bz2）', false);
+    hint(`没有新比赛（最近 ${(gc.matches || []).length} 场都已经在库里了）`, true);
     return;
   }
+  if (!confirm(`发现 ${urls.length} 场新比赛，直接用工具下载？\n\n` +
+               '走断点续传，可关掉页面；每场 50-250 MB')) {
+    hint('已取消，下次点这里还能重来', false);
+    return;
+  }
+
   showPull();
   const hp = await post('/api/http_pull', { urls });
   if (hp.ok) {
