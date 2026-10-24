@@ -1,4 +1,4 @@
-# Cross-Section 首次运行环境准备（Windows PowerShell 5.1+）
+﻿# Cross-Section 首次运行环境准备（Windows PowerShell 5.1+）
 #
 # 作用：程序目录下还没有 python\python.exe 时，自动从国内镜像装一套运行环境。
 #   1. Python 3.12 embeddable（约 11 MB）
@@ -72,19 +72,21 @@ function Install-Python {
 }
 
 # ---------------------------------------------------------------- 2. 依赖 wheel
-# 每个包：包名 = 版本，取值来自 awpy 3.1.1 的实际依赖树
-$Packages = [ordered]@{
-    'polars'            = '2.0.0'
-    'polars-runtime-32' = '2.0.0'
-    'awpy'              = '3.1.1'
-    'rich'              = ''          # 空 = 取最新
-    'typer'             = ''
-    'pygments'          = ''
-    'markdown-it-py'    = ''
-    'mdurl'             = ''
-    'annotated-doc'     = ''
-    'shellingham'       = ''
-}
+# 精确文件名，与 awpy 3.1.1 的实际依赖树一致。
+# 不用「包名 + 版本号」去猜，是因为 PyPI 文件名会把连字符换成下划线
+# （polars-runtime-32 → polars_runtime_32），且空版本会抓到最老的一版。
+$Wheels = @(
+    'polars-2.0.0-py3-none-any.whl',
+    'polars_runtime_32-2.0.0-cp310-abi3-win_amd64.whl',
+    'awpy-3.1.1-cp312-cp312-win_amd64.whl',
+    'rich-15.0.0-py3-none-any.whl',
+    'typer-0.27.3-py3-none-any.whl',
+    'pygments-2.21.0-py3-none-any.whl',
+    'markdown_it_py-4.2.0-py3-none-any.whl',
+    'mdurl-0.1.2-py3-none-any.whl',
+    'annotated_doc-0.0.5-py3-none-any.whl',
+    'shellingham-1.5.4-py2.py3-none-any.whl'
+)
 
 $SimpleMirrors = @(
     'https://pypi.tuna.tsinghua.edu.cn/simple',
@@ -94,52 +96,46 @@ $SimpleMirrors = @(
     'https://pypi.org/simple'
 )
 
-# 在 simple 索引页里挑一个能用在本机的 wheel：优先 cp312-win_amd64，其次 py3-none-any
-function Pick-WheelUrl($pkg, $ver, $mirror) {
-    $page = "$mirror/$pkg/"
+# 在 simple 索引页里按**确切文件名**找下载链接；包名取文件名第一个 '-' 之前那段
+function Pick-WheelUrl($whl, $mirror) {
+    $pkg = ($whl -split '-')[0]
     try {
-        $html = (New-Object Net.WebClient).DownloadString($page)
+        $html = (New-Object Net.WebClient).DownloadString("$mirror/$pkg/")
     } catch {
         return $null
     }
-    $esc = [Regex]::Escape($pkg)
-    $verPart = if ($ver) { [Regex]::Escape("-$ver-") } else { '-\d' }
-    # 形如 href="../../packages/xx/yy/awpy-3.1.1-cp312-cp312-win_amd64.whl#sha256=..."
-    $pattern = "href=`"([^`"#]*$esc$verPart[^`"#]*\.whl)"
-    $cands = [Regex]::Matches($html, $pattern) | ForEach-Object { $_.Groups[1].Value }
-    if (-not $cands) { return $null }
-
-    $win = $cands | Where-Object { $_ -match 'cp312' -and $_ -match 'win_amd64' } | Select-Object -First 1
-    if ($win) { return @{ rel = $win; kind = 'cp312' } }
-    $pure = $cands | Where-Object { $_ -match 'py3-none-any' } | Select-Object -First 1
-    if ($pure) { return @{ rel = $pure; kind = 'pure' } }
+    # href 形如 ../../packages/xx/yy/awpy-3.1.1-cp312-cp312-win_amd64.whl#sha256=...
+    # 捕获组只吃到 .whl 为止（[^"#]* 不含 #），后面可能还有 #sha256 片段
+    $pattern = 'href="([^"#]*' + [Regex]::Escape($whl) + ')'
+    $m = [Regex]::Match($html, $pattern)
+    if ($m.Success) { return $m.Groups[1].Value }
     return $null
 }
 
 function Install-Wheels {
     New-Item -ItemType Directory -Force -Path $Site | Out-Null
     $failed = @()
-    foreach ($pkg in $Packages.Keys) {
-        $ver = $Packages[$pkg]
-        $label = if ($ver) { "$pkg $ver" } else { $pkg }
-        Step "依赖：$label"
+    $i = 0
+    foreach ($whl in $Wheels) {
+        $i++
+        Step "依赖 $i/$($Wheels.Count)：$whl"
         $done = $false
         foreach ($m in $SimpleMirrors) {
-            $hit = Pick-WheelUrl $pkg $ver $m
-            if (-not $hit) { continue }
-            # simple 页里的 href 是相对路径，补成绝对
-            $abs = if ($hit.rel -match '^https?://') { $hit.rel }
-                   else { ([Uri]::new([Uri]"$m/$pkg/", $hit.rel)).AbsoluteUri }
-            $whl = Join-Path $TmpDir (Split-Path $abs -Leaf)
-            Say ("  从 {0} 取 {1}" -f ([Uri]$m).Host, (Split-Path $abs -Leaf)) 'DarkGray'
-            if (Fetch @($abs) $whl $pkg) {
-                Expand-Archive -Path $whl -DestinationPath $Site -Force
+            $rel = Pick-WheelUrl $whl $m
+            if (-not $rel) { continue }
+            # href 是相对索引页的路径（形如 ../../packages/xx/yy/xxx.whl），补成绝对地址
+            $pkg = ($whl -split '-')[0]
+            $abs = ([Uri]::new([Uri]"$m/$pkg/", $rel)).AbsoluteUri
+            $dest = Join-Path $TmpDir $whl
+            Say ("  从 {0} 下载" -f ([Uri]$m).Host) 'DarkGray'
+            if (Fetch @($abs) $dest $whl) {
+                Expand-Archive -Path $dest -DestinationPath $Site -Force
                 Say '  已解压到 site-packages' 'Green'
                 $done = $true
                 break
             }
         }
-        if (-not $done) { $failed += $label }
+        if (-not $done) { $failed += $whl }
     }
     return $failed
 }
