@@ -112,28 +112,9 @@ async function rPullLast() {
 }
 
 function renderPlayers() {
-  const sel = $('#player');
-  if (!sel) return;
-  const ps = S.players || [];
-  if (!ps.length) { sel.innerHTML = '<option>暂无玩家</option>'; return; }
-  sel.innerHTML = ps.map(p =>
-    `<option value="${p.steamid}"${p.is_me ? ' selected' : ''}>${esc(p.name)}（${p.excluded ? `${p.matches}/${p.matches + p.excluded}` : p.matches} 场）</option>`
-  ).join('');
-  sel.title = `共 ${ps.length} 名玩家；括号里是计入统计的场次 / 总场次`;
-  sel.onchange = async e => {
-    // 不能 Number() —— SteamID64 超出 JS 安全整数范围，转数字会丢尾数
-    // （76561199385933782 → 76561199385933780），后端查不到这个人就静默拒绝
-    let r = null;
-    try {
-      r = await post('/api/set_me', { steamid: String(e.target.value) });
-    } catch (err) {
-      hint('切换失败：' + String(err), false);
-      return;
-    }
-    if (r && r.ok === false) { hint(r.error || '切换失败', false); return; }
-    load();
-  };
+  PlayerSelect.render($('#player'), S.players);
 }
+PlayerSelect.bind($('#player'), (p, b) => post(p, b), async () => { await load(); });
 
 /* 一张表管全部：demo 文件信息 + 该场统计 + 回放入口。
    关联键是 match_id（未分析的 demo 没有 match_id，统计列留 —） */

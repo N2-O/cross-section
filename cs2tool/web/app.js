@@ -243,47 +243,14 @@ async function checkUpdate() {
 }
 
 function renderPlayers() {
-  const sel = $('#player');
-  if (!sel) return;
-  const ps = (S.players || []).slice().sort(
-    (a, b) => (b.matches || 0) - (a.matches || 0) || String(a.name).localeCompare(String(b.name)));
-  if (!ps.length) { sel.innerHTML = '<option>暂无玩家</option>'; return; }
-  // 按场次分组：常一起打的放最上面，只同场过一次的单列一组。
-  // 215 个人平铺在一个下拉里翻不动，分组后至少先看到熟人。
-  const groups = [
-    { label: '常一起打（3 场以上）', f: p => (p.matches || 0) >= 3 },
-    { label: '同场过 2 场', f: p => (p.matches || 0) === 2 },
-    { label: '只同场过 1 场', f: p => (p.matches || 0) < 2 },
-  ];
-  const one = p => `<option value="${p.steamid}"${p.is_me ? ' selected' : ''}>` +
-    `${esc(p.name || '（无名字）')}（${p.excluded ? `${p.matches}/${p.matches + p.excluded}` : p.matches} 场）</option>`;
-  const used = new Set();
-  let html = '';
-  for (const g of groups) {
-    const list = ps.filter(p => !used.has(p.steamid) && g.f(p));
-    if (!list.length) continue;
-    list.forEach(p => used.add(p.steamid));
-    html += `<optgroup label="${g.label} · ${list.length} 人">` +
-      list.map(one).join('') + '</optgroup>';
-  }
-  const rest = ps.filter(p => !used.has(p.steamid));
-  if (rest.length) html += `<optgroup label="其他">${rest.map(one).join('')}</optgroup>`;
-  sel.innerHTML = html;
-  sel.title = `共 ${ps.length} 名玩家；括号里是参与的场次。按场次分组，常一起打的在最上面`;
+  PlayerSelect.render($('#player'), S.players);
 }
-$('#player').onchange = async e => {
-  // 不能 Number() —— SteamID64 超出 JS 安全整数范围，转数字会丢尾数
-  // （76561199385933782 → 76561199385933780），后端查不到这个人就静默拒绝。
-  const r = await api('/api/set_me', {
+PlayerSelect.bind($('#player'),
+  (p, b) => api(p, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ steamid: String(e.target.value) })
-  });
-  if (r && r.ok === false) {
-    hint(r.error || '切换失败', false);
-    return;
-  }
-  load();
-};
+    body: JSON.stringify(b)
+  }),
+  async () => { await load(); });
 
 /* ================= 总入口 ================= */
 function renderAll() {
