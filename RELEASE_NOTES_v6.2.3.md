@@ -3,4 +3,5 @@
 - 「地图数据」与「图池」合并成一张「地图」表，放在页面最下方，去掉场次后面的小条
 - 修复 Demo 页切换玩家没反应
 - 「我是谁」下拉由主页与 Demo 页共用一份实现，Demo 页也按场次分组了
-- 修复回放页报 `No module named 'demoparser2'`（首次装配补齐依赖；重跑 `SETUP.bat` 只装缺的）
+- 修复回放页报 `No module named 'demoparser2'`
+- 启动时自检运行环境，缺依赖自动补（不用再手动跑 `SETUP.bat`）

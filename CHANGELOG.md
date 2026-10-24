@@ -5,6 +5,7 @@
 - 修 Demo 页切换玩家没反应：SteamID64 被 `Number()` 截断成错误值（`…031` → `…030`），后端查不到这个人就静默拒绝
 - 「我是谁」下拉收成一份实现（`player-select.js`）：主页与 Demo 页共用，Demo 页也有了场次分组，切换失败会显示原因
 - 修回放页报 `No module named 'demoparser2'`：首次装配的依赖清单漏了该包及其 pandas/numpy/pyarrow/tqdm（装配量从约 60 MB 变成约 120 MB）；重跑 `SETUP.bat` 只补缺的包，自检也改成验证完整解析链
+- `START.bat` 启动前先自检（运行时 + 解析链 7 个模块），缺了自动调 `setup.ps1` 补齐——不用再记着手动跑 `SETUP.bat`
 
 ## v6.2.2 — 2026-10-24
 修比分口径：不再依赖「我是谁」。

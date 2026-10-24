@@ -4,7 +4,7 @@ cd /d "%~dp0"
 
 echo.
 echo   Cross-Section: preparing Python runtime
-echo   (only needed once; ~70 MB from mirrors)
+echo   (only the missing parts are fetched; full set is ~120 MB from mirrors)
 echo.
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup.ps1"

@@ -2,29 +2,37 @@
 title Cross-Section
 cd /d "%~dp0"
 
-REM ---- runtime: bundled, or auto-installed on first run (no system Python needed) ----
-if not exist "python\python.exe" (
+set PY=python\python.exe
+set NEED=0
+
+REM ---- 自检 1：运行时在不在 ----
+if not exist "%PY%" set NEED=1
+
+REM ---- 自检 2：解析链能不能全部 import（回放页要 demoparser2，漏了会崩在页面里）----
+if %NEED%==0 (
+  "%PY%" -c "import awpy, polars, demoparser2, pandas, numpy, pyarrow, tqdm" >nul 2>nul
+  if errorlevel 1 set NEED=1
+)
+
+REM ---- 缺就自动补：只下缺的包，已装的跳过 ----
+if %NEED%==1 (
   echo.
-  echo [SETUP] Python runtime not found - installing now, one time only, about 70 MB.
+  echo [SETUP] Runtime incomplete - installing the missing pieces now, one time only.
   echo.
-  call "%~dp0SETUP.bat"
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup.ps1"
   if errorlevel 1 (
     echo.
-    echo [ERROR] Runtime setup failed. See the messages above.
+    echo [ERROR] Setup failed. See the messages above.
     pause
     exit /b 1
   )
 )
 
-set PY=python\python.exe
-
-REM ---- sanity check: the bundled runtime can import the parsing engine ----
-"%PY%" -c "import awpy" >nul 2>nul
+REM ---- 再验一次：setup 静默失败也要在这里拦住 ----
+"%PY%" -c "import awpy, polars, demoparser2, pandas, numpy, pyarrow, tqdm" >nul 2>nul
 if errorlevel 1 (
-  echo [ERROR] Bundled Python cannot import awpy.
-  echo The package may be incomplete. Re-extract the zip to a clean folder.
-  echo Diagnostic:
-  "%PY%" -c "import sys; print('python', sys.version); print('exe', sys.executable)"
+  echo [ERROR] Environment still incomplete. Diagnostic:
+  "%PY%" -c "import awpy, polars, demoparser2, pandas, numpy, pyarrow, tqdm"
   pause
   exit /b 1
 )
