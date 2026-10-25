@@ -108,7 +108,7 @@ python cs2tool/server.py --port 8790
 
 正式包里**不包含**这个功能。它需要借你本机 Steam 的登录态，属于可选件，所以单独发：
 
-1. 下载 `Cross-Section-AutoPull-v*.zip`（只有 8 KB）
+1. 下载 `Cross-Section-AutoPull-v*.zip`（约 800 KB，里面已经带了 `boiler\` 运行库，不用另外装）
 2. 解压到程序根目录（和 `START.bat` 同一层）
 3. 重启程序
 
