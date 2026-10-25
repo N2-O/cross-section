@@ -52,8 +52,9 @@ def compute_match(conn: sqlite3.Connection, match_id: int) -> int:
     kills = [dict(k) for k in conn.execute(
         "SELECT round, tick, attacker_steamid a, victim_steamid v, assister_steamid s, "
         "headshot, dmg_health FROM kills WHERE match_id=? ORDER BY round, tick", (match_id,))]
+    # 伤害口径：valid = 按受害者剩余血量截断、排除死后补枪的有效伤害（不含甲伤，与游戏内 HUD 一致）
     hurts = [dict(h) for h in conn.execute(
-        "SELECT round, attacker_steamid a, dmg_health d FROM damage WHERE match_id=?", (match_id,))]
+        "SELECT round, attacker_steamid a, valid d FROM damage WHERE match_id=?", (match_id,))]
 
     side = {(p, rd): side_of_round(players[p]["first_side"], rd, half)
             for p in players for rd in range(1, n + 1)}

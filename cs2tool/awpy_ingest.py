@@ -394,6 +394,15 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
     store2.insert_many(conn, "kills", krows)
 
     # ---------- 写 damage
+    # 口径：awpy 的 dmg_health 是原始值，含过量击杀（血不满还打 80）与死后补枪，
+    # 直接 SUM 会偏高 30%+。valid = 按受害者剩余血量截断、死后命中记 0。
+    # 同一受害者一回合可能被多人依次打，必须按 (round, victim, tick) 顺序扣血。
+    death_tick: dict[tuple, int] = {}
+    for k in krows:
+        v = k["victim_steamid"]
+        if v:
+            death_tick[(k["round"], v)] = k["tick"]
+
     drows = []
     for d in dmg.iter_rows(named=True):
         drows.append(dict(
@@ -403,7 +412,31 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
             weapon=d["weapon"] or "",
             dmg_health=_i(d["dmg_health"]), dmg_armor=_i(d["dmg_armor"]),
             hitgroup=d["hitgroup_name"] or ""))
+    drows.sort(key=lambda r: (r["round"], r["victim_steamid"] or 0, r["tick"]))
+
+    remain: dict[tuple, int] = {}
+    dmg_raw_sum = 0
+    dmg_valid_sum = 0
+    for r in drows:
+        raw = r["dmg_health"]
+        v = r["victim_steamid"]
+        dmg_raw_sum += raw
+        if not v:
+            r["valid"] = raw          # 无受害者（环境伤害/自杀等）不做截断
+        else:
+            key = (r["round"], v)
+            dk = death_tick.get(key)
+            if dk is not None and r["tick"] > dk:
+                r["valid"] = 0        # 死后命中，不计
+            else:
+                left = remain.get(key, 100)
+                r["valid"] = max(0, min(raw, left))
+                remain[key] = left - r["valid"]
+        dmg_valid_sum += r["valid"]
     store2.insert_many(conn, "damage", drows)
+    if dmg_raw_sum:
+        log(f"[口径] 伤害合计 原始 {dmg_raw_sum} → 有效 {dmg_valid_sum}"
+            f"（{(dmg_valid_sum - dmg_raw_sum) / dmg_raw_sum * 100:+.1f}%）")
 
     log("统计射击与经济")
     # ---------- 扩展：射击 / 经济 / 目标 / 存活 / 保枪

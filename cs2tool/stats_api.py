@@ -245,7 +245,7 @@ def received(conn: sqlite3.Connection, steamid: int) -> dict:
             "T": {"total": 0, "he": 0, "fire": 0},
             "CT": {"total": 0, "he": 0, "fire": 0}}
     for r in conn.execute(
-            f"""SELECT match_id, round, weapon, SUM(MIN(dmg_health,100)) d
+            f"""SELECT match_id, round, weapon, SUM(valid) d
                FROM damage WHERE victim_steamid=?
                  AND weapon IN ('hegrenade','inferno','molotov','incgrenade')
                  AND {NOT_EX}
@@ -403,7 +403,7 @@ def detail(conn: sqlite3.Connection, steamid: int) -> dict:
                              SUM(COALESCE(jumping,0)) j, AVG(distance) dt
                       FROM kills WHERE attacker_steamid=? AND {NOT_EX}
                       GROUP BY weapon) k ON k.weapon = w.weapon
-           LEFT JOIN (SELECT weapon, SUM(MIN(dmg_health,100)) d
+           LEFT JOIN (SELECT weapon, SUM(valid) d
                       FROM damage WHERE attacker_steamid=? AND weapon IS NOT NULL
                         AND {NOT_EX}
                       GROUP BY weapon) d ON d.weapon = w.weapon
@@ -472,7 +472,7 @@ def detail(conn: sqlite3.Connection, steamid: int) -> dict:
                   "knife_gypsy_jackknife": "knife", "knife_t": "knife",
                   "incgrenade": "inferno", "molotov": "inferno"}
     _dmg_by = {r["weapon"]: (r["d"] or 0) for r in conn.execute(
-        f"SELECT weapon, SUM(MIN(dmg_health,100)) d FROM damage "
+        f"SELECT weapon, SUM(valid) d FROM damage "
         f"WHERE attacker_steamid=? AND weapon IS NOT NULL AND {NOT_EX} "
         f"GROUP BY weapon", (steamid,))}
     for w in weapons:
@@ -507,7 +507,7 @@ def detail(conn: sqlite3.Connection, steamid: int) -> dict:
     # ---- 伤害构成：枪械 / 手雷 / 火焰 ----
     dmg = {"gun": 0, "he": 0, "fire": 0, "other": 0}
     for r in conn.execute(
-        f"""SELECT weapon, SUM(dmg_health) d FROM damage
+        f"""SELECT weapon, SUM(valid) d FROM damage
            WHERE attacker_steamid=? AND {NOT_EX} GROUP BY weapon""", (steamid,)
     ):
         w = (r["weapon"] or "").lower()
@@ -936,7 +936,7 @@ def utility(conn, steamid: int, match_ids: list[int] | None = None) -> dict:
     dmg = {}
     used = {}
     for r in conn.execute(
-        f"""SELECT weapon, SUM(MIN(dmg_health,100)) d, COUNT(*) n,
+        f"""SELECT weapon, SUM(valid) d, COUNT(*) n,
                   COUNT(DISTINCT tick) t
            FROM damage WHERE attacker_steamid=? AND {_scope} GROUP BY weapon""",
         tuple(_args)):

@@ -133,7 +133,7 @@ def build(conn: sqlite3.Connection, steamid: int,
                 tk = [k for k in evs if int(k["tick"] or 0) >= clutch_start
                       and k["attacker_steamid"] == steamid]
                 dmg = conn.execute(
-                    """SELECT COALESCE(SUM(MIN(dmg_health, 100)),0) d
+                    """SELECT COALESCE(SUM(valid),0) d
                        FROM damage WHERE match_id=? AND round=? AND attacker_steamid=?
                        AND tick>=?""",
                     (mid, rn, steamid, clutch_start)).fetchone()

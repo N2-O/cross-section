@@ -89,7 +89,13 @@ CREATE INDEX IF NOT EXISTS idx_kills ON kills(match_id, round, tick);
 CREATE TABLE IF NOT EXISTS damage (
     match_id INTEGER NOT NULL, round INTEGER NOT NULL, tick INTEGER NOT NULL,
     attacker_steamid INTEGER, victim_steamid INTEGER,
-    weapon TEXT, dmg_health INTEGER, dmg_armor INTEGER, hitgroup TEXT
+    weapon TEXT,
+    -- 原始伤害（awpy player_hurt 原值，含过量击杀与死后补枪，仅作追溯）
+    dmg_health INTEGER,
+    -- 有效伤害 = 按受害者剩余血量截断、死后命中记 0；
+    -- 所有伤害统计应该 SUM 这一列，不要 SUM(dmg_health)
+    valid INTEGER,
+    dmg_armor INTEGER, hitgroup TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_damage ON damage(match_id, round);
 
@@ -257,6 +263,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         # 排除出统计的局（投降、摆烂、半路不打了）：
         # 打完但自己没认真打的数据留在库里，但默认不参与平均/走势/能力画像
         "matches": [("excluded", "INTEGER DEFAULT 0"), ("exclude_note", "TEXT")],
+        # 有效伤害列：原始 dmg_health 含过量击杀与死后补枪，统计口径要改用 valid
+        "damage": [("valid", "INTEGER")],
         # awpy 统计层新增的指标
         "pms": [
             ("flash_assists", "INTEGER"),

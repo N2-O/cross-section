@@ -706,7 +706,9 @@ def api_match_detail(conn, mid):
                            LEFT JOIN players pv ON pv.match_id=k.match_id AND pv.steamid=k.victim_steamid
                            LEFT JOIN players ps ON ps.match_id=k.match_id AND ps.steamid=k.assister_steamid
                            WHERE k.match_id=? ORDER BY k.round, k.tick""", (mid,))
-    dmg = _rows(conn, """SELECT d.round, pa.name attacker_name, d.dmg_health,
+    dmg = _rows(conn, """SELECT d.round, pa.name attacker_name,
+                                d.valid AS dmg_health,
+                                COALESCE(d.dmg_health,0) AS dmg_health_raw,
                                 d.weapon
                          FROM damage d
                          LEFT JOIN players pa ON pa.match_id=d.match_id AND pa.steamid=d.attacker_steamid

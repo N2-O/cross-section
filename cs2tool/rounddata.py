@@ -165,40 +165,26 @@ def build(conn, match_id: int, demo_path: str, overviews_dir: str, step: int = 1
     except Exception:
         pass
 
-    # 每回合每个受害者的死亡 tick（一个回合内同一人只会死一次）
-    death_tick = {}
-    for k in conn.execute("SELECT round, victim_steamid v, tick FROM kills WHERE match_id=?", (match_id,)):
-        if k["v"]:
-            death_tick[(int(k["round"]), toid(k["v"]))] = int(k["tick"])
-
-    # 伤害口径：只算 dmg_health（不含甲伤，与游戏内 HUD 一致），
-    # 截断到受害者本回合剩余血量（初始 100），并排除死后补枪（tick 严格大于死亡 tick）。
+    # 伤害口径：valid 列在解析时已按受害者剩余血量截断、并排除死后补枪（不含甲伤，与游戏内 HUD 一致），
+    # 这里直接按 (round, attacker) 聚合；原始 dmg_health 仅留作日志对照。
     dmg_by_round = {}
-    dmg_raw_by_round = {}  # 旧口径，仅供日志对照，不写入回放数据
-    hp_left = {}           # (round, victim_steamid) -> 剩余血量
-    for dd in conn.execute("SELECT round, tick, attacker_steamid a, victim_steamid v, dmg_health d "
-                           "FROM damage WHERE match_id=? ORDER BY round, tick", (match_id,)):
+    dmg_raw_by_round = {}  # 旧口径（原始 dmg_health），仅供日志对照，不写入回放数据
+    for dd in conn.execute(
+            "SELECT round, attacker_steamid a, "
+            "       COALESCE(SUM(valid),0) v, COALESCE(SUM(dmg_health),0) raw "
+            "FROM damage WHERE match_id=? GROUP BY round, attacker_steamid",
+            (match_id,)):
         rnd = int(dd["round"])
-        a, v = dd["a"], dd["v"]
-        d = dd["d"] or 0
+        a = dd["a"]
         nm = players_db.get(a, {}).get("name") if (a and a > 0) else None
-        if nm:
-            dmg_raw_by_round.setdefault(rnd, {})
-            dmg_raw_by_round[rnd][nm] = dmg_raw_by_round[rnd].get(nm, 0) + d
-        if not nm or not v or d <= 0:
+        if not nm:
             continue
-        vid = toid(v)
-        dt = death_tick.get((rnd, vid))
-        if dt is not None and int(dd["tick"]) > dt:
-            continue        # 死后补枪，不计伤害
-        key = (rnd, vid)
-        left = hp_left.get(key, 100)
-        if left <= 0:
-            continue
-        eff = d if d < left else left
-        hp_left[key] = left - eff
-        dmg_by_round.setdefault(rnd, {})
-        dmg_by_round[rnd][nm] = dmg_by_round[rnd].get(nm, 0) + eff
+        dmg_raw_by_round.setdefault(rnd, {})
+        dmg_raw_by_round[rnd][nm] = dmg_raw_by_round[rnd].get(nm, 0) + (dd["raw"] or 0)
+        v = dd["v"] or 0
+        if v > 0:
+            dmg_by_round.setdefault(rnd, {})
+            dmg_by_round[rnd][nm] = dmg_by_round[rnd].get(nm, 0) + v
 
     _raw_total = sum(sum(x.values()) for x in dmg_raw_by_round.values())
     _eff_total = sum(sum(x.values()) for x in dmg_by_round.values())
@@ -312,7 +298,7 @@ def build(conn, match_id: int, demo_path: str, overviews_dir: str, step: int = 1
             u[kind] = u.get(kind, 0) + 1
             if kind in ("smoke", "molotov", "decoy"):
                 u["sec"] = round(u.get("sec", 0) + max(0.0, te_ - ts_), 1)
-        for dd in conn.execute("SELECT attacker_steamid a, weapon, dmg_health d FROM damage "
+        for dd in conn.execute("SELECT attacker_steamid a, weapon, valid d FROM damage "
                                "WHERE match_id=? AND round=?", (match_id, rd)):
             w = str(dd["weapon"]).replace("weapon_", "")
             if w in ("hegrenade", "inferno", "molotov", "incgrenade"):

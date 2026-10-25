@@ -74,11 +74,11 @@ METRICS: dict[str, dict] = {
 
     # ============================================================ 伤害
     "damage_total": dict(name="总伤害", cat="伤害", unit="点",
-                         definition="对敌方造成的实际生命值损失",
-                         formula="有效伤害事件求和",
+                         definition="对敌方造成的实际生命值损失（已按受害者剩余血量截断）",
+                         formula="damage.valid 求和",
                          numerator="damage_total", denominator=None,
-                         source="awpy.stats 的伤害口径：按命中时的剩余血量截断",
-                         note="爆头打满血只计 100 而非 120；overkill 不计入", min_sample=1),
+                         source="damage.valid（解析时按命中时的剩余血量截断、死后命中记 0）",
+                         note="爆头打满血只计 100 而非 120；overkill 与死后补枪不计入", min_sample=1),
 
     "rounds_played": dict(name="总回合", cat="样本", unit="回合",
                  definition="统计范围内计入的全部回合数（含对手赢的回合）",
@@ -110,7 +110,7 @@ METRICS: dict[str, dict] = {
                 definition="每个个人计入回合平均造成的敌方伤害",
                 formula="总有效伤害 ÷ 个人计入回合数",
                 numerator="damage_total", denominator="rounds",
-                source="awpy.stats.adr（伤害已按剩余血量截断）",
+                source="damage.valid ÷ rounds_played（有效伤害：按剩余血量截断、排除死后补枪）",
                 note="只统计对敌方的实际生命值损失，穿墙/道具伤害计入但受同样截断",
                 min_sample=1),
 
@@ -118,7 +118,7 @@ METRICS: dict[str, dict] = {
                        definition="每回合由枪械与近战造成的伤害",
                        formula="武器伤害 ÷ 个人计入回合数",
                        numerator="weapon_damage", denominator="rounds",
-                       source="damages 按 weapon 分组后排除投掷物",
+                       source="damage.valid 按 weapon 分组后排除投掷物",
                        note="与总 ADR 的差额即道具伤害", min_sample=1),
 
     "hs_kills": dict(name="爆头击杀", cat="伤害", unit="个",
@@ -316,10 +316,10 @@ METRICS: dict[str, dict] = {
                        source="kills 表按残局回合过滤", note=None, min_sample=1),
 
     "clutch_dmg": dict(name="残局伤害", cat="残局", unit="伤害",
-                       definition="残局场面下造成的总伤害",
-                       formula="残局回合内伤害求和",
+                       definition="残局场面下造成的有效伤害",
+                       formula="残局回合内 damage.valid 求和",
                        numerator="clutch_dmg", denominator=None,
-                       source="damage 表按残局回合过滤", note=None, min_sample=1),
+                       source="damage 表按残局回合过滤后对 valid 求和", note=None, min_sample=1),
 
     "save_count": dict(name="保枪次数", cat="残局", unit="次",
                        definition="残局里选择不硬拼、带着装备活到回合结束的次数",
@@ -554,9 +554,9 @@ METRICS: dict[str, dict] = {
                          note="只证明「死时还瞎着」，不证明是因闪而死", min_sample=5),
     "util_taken": dict(name="吃到道具伤害", cat="道具", unit="点",
                        definition="本人作为受害者承受的手雷与燃烧类伤害",
-                       formula="damage 表中 victim=本人且 weapon∈(hegrenade, inferno, molotov, incgrenade) 的伤害和",
+                       formula="damage 表中 victim=本人且 weapon∈(hegrenade, inferno, molotov, incgrenade) 的 valid 求和（有效伤害：已按剩余血量截断、排除死后补枪）",
                        numerator="util_taken", denominator=None,
-                       source="awpy.damages（按剩余血量截断）",
+                       source="damage.valid（按剩余血量截断、死后命中记 0）",
                        note="与 utility_damage 方向相反：那个是我造成的，这个是我吃到的", min_sample=1),
 
     # ============================================================ 道具
@@ -569,9 +569,9 @@ METRICS: dict[str, dict] = {
 
     "util_damage": dict(name="道具伤害", cat="道具", unit="点",
                         definition="HE 与燃烧弹造成的敌方实际伤害",
-                        formula="投掷物关联的伤害事件求和",
+                        formula="投掷物关联的 damage.valid 求和（有效伤害：按剩余血量截断、排除死后补枪）",
                         numerator="util_damage", denominator=None,
-                        source="awpy.stats.utility_damage",
+                        source="damage.valid 按投掷物武器过滤",
                         note="没有伤害不代表投掷无效，可能只起到了区域限制作用",
                         min_sample=1),
 
@@ -600,7 +600,7 @@ METRICS: dict[str, dict] = {
                       definition="火雷平均每回合造成的伤害（只算火和雷，烟闪诱饵不计）",
                       formula="火雷总伤害 ÷ 总回合",
                       numerator="utility_damage", denominator="rounds_played",
-                      source="damage 表按 weapon=hegrenade/molotov/incendiary 过滤",
+                      source="damage.valid 按 weapon=hegrenade/molotov/incendiary 过滤（含死后补枪排除）",
                       note="用局均而不是累计——累计只反映打了多少场", min_sample=1),
     "util_dmg_per_use": dict(name="每颗平均伤害", cat="道具", unit="伤害/颗",
                       definition="一颗火雷平均打出多少伤害",
