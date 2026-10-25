@@ -18,6 +18,7 @@
 
 ### 其他
 - `rounds` 加 `bomb_tick`：从 `dem.bomb` 的 `finish_plant` 取安放时刻，残局维度据此算「炸弹安放后存活%」
+- **修升级后扫不到 demo**：`settings.json` 里存的是绝对路径，换版本目录后仍指向上一版（实测 `paths.demos` 还写着 v6.2.5，而 demo 已随包搬走，扫出 0 个）。现在 `demos_dir` / `data_dir` 都先判 `os.path.isdir`，不存在就回落默认并打 `[warn]`，不需要用户手改 JSON
 
 ## v6.2.5 — 2026-10-25
 经济口径全面修正（**历史对局需重新解析**才会更新）。
