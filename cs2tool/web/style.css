@@ -367,6 +367,84 @@ button.pri{background:linear-gradient(var(--ov2),var(--ov2)),rgb(var(--tint))!im
 .bar .tr{background:var(--track)!important}
 .bar .tr i{background:var(--fill)!important}
 .bar.neg .tr i{background:var(--bad)!important}
+
+/* ===== 能力画像：七维卡片 + ? 悬浮说明 =====
+   布局：火力独占一行（细项内部两列），其余六个每行两个、共三行。
+   窄屏全部退化成单列。每张卡只有一条上准线，无外框无大圆角。
+   颜色全部走主题变量：--txt / --dim / --rule / --track / --ok / --bad / --terr */
+#abDims{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:22px 28px;align-items:start}
+#abDims .abc:first-child{grid-column:1 / -1}
+#abDims .abc.open:first-child .abil{display:grid;grid-template-columns:1fr 1fr;gap:0 32px}
+@media(max-width:860px){
+  #abDims{grid-template-columns:1fr}
+  #abDims .abc:first-child{grid-column:auto}
+  #abDims .abc.open:first-child .abil{display:flex}
+}
+/* 板块标题图标：inline SVG，fill=currentColor 跟随主题 */
+.seci{vertical-align:-3px;margin-right:7px;opacity:.85}
+.sec:hover .seci{opacity:1}
+/* 能力画像标题右侧：分边切换 + 样本说明，两者之间留出间隙，样本说明贴最右 */
+#abSample{margin-left:16px;white-space:nowrap}
+.abc{position:relative;overflow:visible;padding:14px 16px 10px;
+  background:rgba(var(--tint),.55);
+  -webkit-backdrop-filter:blur(12px) saturate(106%);
+  backdrop-filter:blur(12px) saturate(106%);
+  border-top:1px solid var(--rule)}
+/* 维度头：名字 + ? + 右侧大号分数 */
+.abh{display:flex;align-items:center;gap:8px;min-width:0}
+.abn{font-size:16px;font-weight:600;letter-spacing:-.01em;color:var(--txt);
+  display:flex;align-items:center;gap:7px;min-width:0}
+/* 维度图标：16px 细线，跟名字同一基线上 */
+.abn .abi-i{width:16px;height:16px;flex:0 0 auto;opacity:.72;margin-right:-1px}
+/* 母项的英文对照：比中文淡，跟子项同一套语义 */
+.abn .abd{font-size:12.5px;font-weight:500;letter-spacing:.01em;opacity:.55}
+.abs{margin-left:auto;flex:0 0 auto;display:flex;align-items:baseline;gap:4px;
+  font-variant-numeric:tabular-nums}
+.abs b{font-size:32px;font-weight:700;letter-spacing:-.03em;line-height:1;color:var(--txt)}
+.abs span{font-size:12px;color:var(--dim)}
+/* 母项的条：粗、实色、跟分数同色系，作为层级锚点 */
+.abbar{height:4px;background:var(--track);margin:12px 0 2px;overflow:hidden}
+.abbar i{display:block;height:100%;background:var(--fill);transition:width .35s ease}
+.abbar i.s2{background:var(--ok)}
+.abbar i.s1{background:var(--ok);opacity:.62}
+.abbar i.s0{background:var(--fill)}
+.abbar i.sm1{background:var(--terr)}
+.abbar i.sm2{background:var(--bad)}
+/* 折叠：默认只留头部 + 分数条，点头部逐个展开（可同时开多个） */
+.abh{cursor:pointer}
+.abc .abil{display:none}
+.abc.open .abil{display:flex}
+/* 展开指示：分数右侧的小三角，展开时翻上去 */
+.abcaret{width:0;height:0;flex:0 0 auto;margin-left:9px;vertical-align:middle;
+  border-left:4px solid transparent;border-right:4px solid transparent;
+  border-top:5px solid var(--dim);transition:transform .18s ease}
+.abc.open .abcaret{transform:rotate(180deg)}
+.abc:hover .abcaret{border-top-color:var(--txt)}
+
+/* 细项（子项）：整体降一档 —— 值不加粗、条更细更淡、跟母项之间留出呼吸。
+   项与项之间不加分隔线：条本身就是分隔，靠 padding 撑开间距。 */
+.abil{display:flex;flex-direction:column;margin-top:11px}
+.abi{padding:7px 0;min-width:0}
+.abit{display:flex;align-items:center;gap:6px;font-size:12.5px;min-width:0}
+.abi .k{color:var(--dim);display:flex;align-items:baseline;gap:7px;min-width:0;overflow:hidden}
+/* 英文对照：比中文淡一档，长名自动省略 */
+.abi .k .ka{font-style:normal;font-size:11.5px;letter-spacing:.01em;opacity:.62;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.abi .v{margin-left:auto;flex:0 0 auto;font-weight:500;color:var(--txt);opacity:.9;
+  font-variant-numeric:tabular-nums}
+/* 细项的条：只占母项一半粗，统一中性色 —— 长度已经表达百分位，不需要再靠颜色说话 */
+.abis{height:2px;background:var(--track);margin-top:4px;overflow:hidden;opacity:.78}
+.abis i{display:block;height:100%;background:var(--fill);transition:width .35s ease}
+/* ? 圈圈 */
+.abq{position:relative;display:inline-flex;align-items:center;justify-content:center;
+  flex:0 0 auto;width:15px;height:15px;border:1px solid var(--rule);border-radius:50%;
+  font-size:11px;line-height:1;font-weight:500;color:var(--dim);
+  cursor:help;user-select:none;transition:color .13s,border-color .13s}
+.abq:hover{color:var(--txt);border-color:var(--acc)}
+/* 悬浮说明：纯 CSS，13px 起（不是小字），浅底深字跟着主题反转 */
+@media(max-width:760px){#abDims{grid-template-columns:1fr}}
+
 .tabs button.on,.wmenu button.on{
   background:linear-gradient(var(--ov2),var(--ov2)),rgb(var(--tint))!important;
   color:var(--txt)!important}
@@ -407,7 +485,7 @@ body.nott [data-m]{border-bottom:0;cursor:auto}
 #mtip.on{opacity:1;transform:translateY(0)}
 #mtip .t{font-weight:600;font-size: 13px;margin-bottom:5px}
 #mtip .ttag{font-weight:400;font-size: 12px;color:var(--dim);margin-left:6px}
-#mtip .d{opacity:.9;margin-bottom:7px}
+#mtip .d{opacity:.9;margin-bottom:7px;white-space:pre-line}
 #mtip .f{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size: 12px;
   background:rgba(255,255,255,.055);border-radius:5px;padding:5px 7px;
   color:#cfd8e3;margin-bottom:7px;word-break:break-word;white-space:pre-wrap}

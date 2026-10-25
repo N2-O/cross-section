@@ -564,17 +564,23 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
     except Exception as e:
         log(f"  [warn] 花费统计失败: {type(e).__name__}: {e}")
 
-    # 目标：安包 / 拆包
+    # 目标：安包 / 拆包 + 安放时刻（「安放后存活率」要用安放 tick）
     plant_map: dict[int, int] = {}
     defuse_map: dict[int, int] = {}
+    plant_tick: dict[int, int] = {}          # 回合号 -> 安放完成 tick
     try:
         for b in dem.bomb.iter_rows(named=True):
             if not b["steamid"]:
                 continue
             sid = int(b["steamid"])
-            if b["event"] == "finish_plant":
+            ev = b["event"]
+            if ev == "finish_plant":
                 plant_map[sid] = plant_map.get(sid, 0) + 1
-            elif b["event"] == "defuse":
+                tk = _i(b.get("tick"))
+                rn = tick_round(tk) if tk else None
+                if rn and rn not in plant_tick:
+                    plant_tick[rn] = tk      # 一个回合只安一次包，取第一次
+            elif ev == "defuse":
                 defuse_map[sid] = defuse_map.get(sid, 0) + 1
     except Exception as e:
         log(f"  [warn] 目标事件失败: {type(e).__name__}: {e}")
@@ -677,8 +683,8 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
         for rr in conn.execute("SELECT round, winner FROM rounds WHERE match_id=?", (mid,)):
             a_side = side_of("T", int(rr["round"]))
             a_win = int(rr["winner"] == a_side)
-            conn.execute("UPDATE rounds SET a_side=?, a_win=? WHERE match_id=? AND round=?",
-                         (a_side, a_win, mid, rr["round"]))
+            conn.execute("UPDATE rounds SET a_side=?, a_win=?, bomb_tick=? WHERE match_id=? AND round=?",
+                         (a_side, a_win, plant_tick.get(int(rr["round"])), mid, rr["round"]))
 
     # 每人每阵营的回合数 + 击杀/死亡/原始伤害
     agg: dict[int, dict] = {}

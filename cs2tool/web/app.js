@@ -82,6 +82,24 @@ async function loadMetrics() {
   try { METRICS = (await api('/api/metrics')).metrics || {}; } catch (e) { METRICS = {}; }
 }
 function hideTip() { const t = $('#mtip'); if (t) t.classList.remove('on'); }
+/* 把气泡放到锚点元素上方（放不下就下方），水平方向夹在视口内 */
+function placeTip(t, el) {
+  const r = el.getBoundingClientRect();
+  let x = r.left + r.width / 2 - t.offsetWidth / 2;
+  x = Math.max(10, Math.min(x, innerWidth - t.offsetWidth - 10));
+  let y = r.top - t.offsetHeight - 10;
+  if (y < 10) y = r.bottom + 10;
+  t.style.left = x + 'px'; t.style.top = y + 'px';
+}
+/* 能力画像的 ? 圈圈：文案是纯文本（可能含空行），走同一个气泡 */
+function showAbTip(el) {
+  const txt = el.dataset.abtip;
+  if (!txt) return;
+  const t = $('#mtip'); if (!t) return;
+  t.innerHTML = `<div class="d">${esc(txt)}</div>`;
+  t.classList.add('on');
+  placeTip(t, el);
+}
 function showTip(el) {
   const m = METRICS[el.dataset.m];
   if (!m) return;
@@ -97,19 +115,18 @@ function showTip(el) {
     + (m.note ? `<div class="n">${esc(m.note)}</div>` : '')
     + (m.source ? `<div class="s">来源：${esc(m.source)}</div>` : '');
   t.classList.add('on');
-  const r = el.getBoundingClientRect();
-  let x = r.left + r.width / 2 - t.offsetWidth / 2;
-  x = Math.max(10, Math.min(x, innerWidth - t.offsetWidth - 10));
-  let y = r.top - t.offsetHeight - 10;
-  if (y < 10) y = r.bottom + 10;
-  t.style.left = x + 'px'; t.style.top = y + 'px';
+  placeTip(t, el);
 }
 document.addEventListener('mouseover', e => {
   if (document.body.classList.contains('nott')) return;
+  const ab = e.target.closest('[data-abtip]');
+  if (ab) { showAbTip(ab); return; }          // 能力画像的 ? 圈圈
   const el = e.target.closest('[data-m]');
   if (el) showTip(el);
 });
-document.addEventListener('mouseout', e => { if (e.target.closest('[data-m]')) hideTip(); });
+document.addEventListener('mouseout', e => {
+  if (e.target.closest('[data-m]') || e.target.closest('[data-abtip]')) hideTip();
+});
 window.addEventListener('scroll', hideTip, { passive: true });
 
 const M = (k, label) => `<span data-m="${k}">${esc(label || (METRICS[k] || {}).name || k)}</span>`;
@@ -255,7 +272,9 @@ PlayerSelect.bind($('#player'),
 /* ================= 总入口 ================= */
 function renderAll() {
   if (!S.overview || S.overview.empty) {
+    hideAbility();
     $$('.sec').forEach(el => {
+      if (el.hidden) return;             // 能力画像这类按需出现的区块不塞占位
       if (!el.querySelector('.nil'))
         el.insertAdjacentHTML('beforeend',
           '<div class="nil">还没有对局数据。打开「设置 → 数据操作」扫描 demo 目录并分析。</div>');
@@ -264,6 +283,7 @@ function renderAll() {
   }
   const v = view();
   rOverview(v);
+  renderAbility();
   rAvg(v);
   rWeapons();
   rEvents();
@@ -310,6 +330,212 @@ function rOverview(v) {
   });
 
   rTrend();
+}
+
+/* ================= 能力画像（七维） =================
+ * 数据来自 /api/v1/ability；后端没装 ability2、没数据、接口报错时整块安静隐藏。
+ * 分数条颜色按 step（-2 差 … 2 好），说明一律走 ? 悬浮，卡片里不写小字。
+ */
+let AB_SEQ = 0;
+const abStepCls = s => (s >= 2 ? 's2' : s === 1 ? 's1' : s <= -2 ? 'sm2' : s === -1 ? 'sm1' : 's0');
+const abStepFromZ = z => {
+  const v = Number(z);
+  if (!isFinite(v)) return 0;
+  return v >= 1 ? 2 : v >= .35 ? 1 : v <= -1 ? -2 : v <= -.35 ? -1 : 0;
+};
+/* ? 圈圈：文案放 data-abtip，悬浮时交给全局 #mtip 渲染（fixed 定位、向上弹、自动避边界） */
+const abQ = txt => txt
+  ? `<span class="abq" data-abtip="${esc(txt)}">?</span>` : '';
+
+/* 维度说明：中文是我们自己的口径解释，英文是 HLTV 官方 tooltip 原文（逐字引用）。
+   渲染时两段拼在一个悬浮框里，中间空一行。 */
+const AB_DIM_DESC = {
+  firepower: {
+    zh: '赢下对枪的能力——官方刻意奖励"高产出"，即使这么打的代价很高（死得多也不扣分）。'
+      + '这里用每胜局击杀、无伤击杀、多杀频率、回合贡献和伤害每回合来衡量输出密度。',
+    en: "A player's ability to win their duels, designed to reward high-output players "
+      + 'even if the cost of that output is high.'
+  },
+  opening: {
+    zh: '你有多主动去找首杀和早期对枪。看首杀尝试率、队内首杀顺位、首个交火发生得多早，'
+      + '以及每回合开火次数——这项高说明你常年是第一个碰敌人的那个人。',
+    en: 'How often a player goes looking for openers or early-round duels.'
+  },
+  entrying: {
+    zh: '你多常死在队友能换到的地方。分高说明你主动承担第一个风险、让别人不必去冒；'
+      + '这个维度不分进攻防守——防守方前压被留下、守点被破后能不能被补掉，同样算在里面。',
+    en: 'How often a player dies somewhere their team can trade. High scorers take the '
+      + 'first risk so somebody else does not have to.'
+  },
+  trading: {
+    zh: '你多常因为队友吸引火力而受益——他挨打时你补枪、他被换掉时你换回来。'
+      + '看换人机会、换人成功率、诱饵击杀和助攻击杀。',
+    en: 'How often a player is the one to benefit from a teammate taking fire, via a trade '
+      + 'or a frag while they are being damaged.'
+  },
+  closing: {
+    zh: '你多常活到残局情形（安包后、1vN）。看每回合存活时长、安放后是否还活着、'
+      + '是不是最后一个倒下，以及残局胜率。',
+    en: 'How often a player is alive for late-round situations like post-plants or clutches.'
+  },
+  sniping: {
+    zh: '你多常把狙击枪当主武器使。看有狙的回合占比、狙击击杀占你总击杀的比例，AWP 单列一档。',
+    en: 'How often a player deploys sniper rifles as their primary weapon.'
+  },
+  utility: {
+    zh: '你多常当队伍的投掷手。数量轨看每回合投掷量（3 颗算满档、按 2/3 次幂换算），'
+      + '质量轨看这些道具是否真干扰到人；总分取两者几何平均——只囤不用拿不到高分。',
+    en: "How often a player is their team's grenadier, ready to throw smokes, flashes, "
+      + 'or damage-dealing utility.'
+  }
+};
+/* 维度悬浮文案：中文口径 + HLTV 英文原文（空一行分隔） */
+const abDimTip = (key, fallback) => {
+  const d = AB_DIM_DESC[key];
+  if (!d) return fallback || '';
+  return d.zh + '\n\nHLTV: ' + d.en;
+};
+/* 七维图标：自绘 SVG（通用符号，无第三方素材），stroke=currentColor 跟随主题。
+   尺寸统一 24 网格，细线 1.6 —— 跟项目其它图标同一套手感。 */
+const AB_ICON = {
+  firepower: '<circle cx="12" cy="12" r="2.4"/><path d="M12 3.6v3M12 17.4v3M3.6 12h3M17.4 12h3M6.1 6.1l2.1 2.1M15.8 15.8l2.1 2.1M17.9 6.1l-2.1 2.1M8.2 15.8l-2.1 2.1"/>',
+  entrying: '<path d="M14.5 4H20v16h-5.5"/><path d="M3.5 12h8.5M9 8.6l3.4 3.4L9 15.4"/>',
+  trading: '<path d="M3.5 8.5h11M12 5.2 15.3 8.5 12 11.8"/><path d="M20.5 15.5h-11M11.5 12.2 8.2 15.5l3.3 3.3"/>',
+  opening: '<path d="M13.6 2.5 5.2 13.2h4.9L9.1 21.5l8.4-10.7h-4.9l1-8.3z"/>',
+  closing: '<circle cx="12" cy="12" r="7.6"/><circle cx="12" cy="12" r="3.6"/><circle cx="12" cy="12" r=".9"/>',
+  sniping: '<circle cx="12" cy="12" r="6.8"/><path d="M12 2.4v4.6M12 17v4.6M2.4 12h4.6M17 12h4.6"/><circle cx="12" cy="12" r="1.1"/>',
+  utility: '<path d="M9.2 6.4h5.6l1 4.2V19H8.2V10.6l1-4.2z"/><path d="M10.9 6.4V4.2h2.2v2.2"/><path d="M13.4 5.2h3.4"/><path d="M8.2 12.6h7.6"/>'
+};
+const abIcon = key => {
+  const body = AB_ICON[key];
+  return body
+    ? `<svg class="abi-i" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"
+         aria-hidden="true">${body}</svg>` : '';
+};
+/* 七维英文名（母项也做中英对照，跟子项一套） */
+const AB_DIM_EN = {
+  firepower: 'Firepower', entrying: 'Entrying', trading: 'Trading',
+  opening: 'Opening', closing: 'Closing', sniping: 'Sniping', utility: 'Utility'
+};
+/* 细项英文名：与 Leetify 官方术语逐条对齐（中文为主，英文做对照） */
+const AB_EN = {
+  kpr_win: 'Kills per Round Win', nd_kill_pr: 'Perfect Kills per Round',
+  kill_round_pct: 'Rounds with a Kill', net_kill_24: 'Kills per 24 Rounds',
+  win_contrib: 'Round Win Shares', prevent_trade_pr: 'Trade Denials per Round',
+  multi_round_pct: 'Rounds with a Multi-Kill', net_dmg_pr: 'Damage per Round',
+  tradeable_death_pr: 'Tradeable Deaths per Round', death_traded_pct: 'Deaths Traded %',
+  bait_assist_pr: 'Bait Assists per Round', fd_traded_pct: 'Opening Deaths Traded %',
+  trade_opp_pr: 'Trade Opportunities per Round', trade_success_pct: 'Trade Kills %',
+  bait_kill_pct: 'Bait Kills %', assist_kill_pct: 'Assisted Kills %',
+  fe_pct: 'Opening Attempts', fk_order: 'First Duel Rank in Team',
+  fk_time_s: 'First Duel Time', fires_pr: 'Weapon Attacks per Round',
+  survive_s: 'Time Alive per Round', postplant_alive_pct: 'Alive for Post-Plant %',
+  last_alive_pct: 'Last Alive %', clutch_24: 'Clutches per 24 Rounds',
+  sniper_round_pct: 'Rounds with a Sniper', sniper_kill_pct: 'Sniper Kills %',
+  awp_round_pct: 'Rounds with an AWP', awp_kill_pct: 'AWP Kills %',
+  smoke_pr: 'Smokes Thrown per Round', flash_pr: 'Flashbangs Thrown per Round',
+  fire_pr: 'Molotovs Thrown per Round', he_pr: 'HE Grenades Thrown per Round'
+};
+/* 细项英文说明：HLTV 不公开细项定义，这些是我们的英文自述，标 EN 而非 HLTV */
+const AB_EN_DESC = {
+  kpr_win: 'Kills you average in each round you win.',
+  nd_kill_pr: 'Kills made without taking any damage, per round.',
+  kill_round_pct: 'Share of rounds where you got at least one kill.',
+  net_kill_24: 'Kills per 24 rounds — a full-match volume of frags.',
+  win_contrib: 'Your share of team kills + assists in the rounds you won.',
+  prevent_trade_pr: 'How often your kills go unanswered by an immediate trade.',
+  multi_round_pct: 'Rounds where you personally got 2 or more kills.',
+  net_dmg_pr: 'Damage dealt per round (overkill and post-death shots excluded).',
+  tradeable_death_pr: 'Deaths per round that happened where a teammate could trade you.',
+  death_traded_pct: 'Share of your deaths that a teammate traded back.',
+  bait_assist_pr: 'Assists per round where you drew fire and a teammate finished.',
+  fd_traded_pct: 'Share of your opening deaths that got traded.',
+  trade_opp_pr: 'Chances per round to trade a teammate\'s death.',
+  trade_success_pct: 'Share of trade chances you actually converted.',
+  bait_kill_pct: 'Share of your kills made right after a teammate took fire.',
+  assist_kill_pct: 'Share of your kills that came with an assist (you damaged first).',
+  fe_pct: 'Share of rounds where you took part in the first duel.',
+  fk_order: 'Average position within your team in the opening duel.',
+  fk_time_s: 'Seconds into the round when the first kill (you involved) happens.',
+  fires_pr: 'Weapon attacks — shots fired — per round.',
+  survive_s: 'Seconds alive per round.',
+  postplant_alive_pct: 'Share of planted rounds where you were still alive when the bomb went down.',
+  last_alive_pct: 'Share of rounds where you were the last one standing on your team.',
+  clutch_24: '1vN clutches won per 24 rounds.',
+  sniper_round_pct: 'Share of rounds where you used a sniper rifle.',
+  sniper_kill_pct: 'Share of your kills made with a sniper rifle.',
+  awp_round_pct: 'Share of rounds where you held an AWP.',
+  awp_kill_pct: 'Share of your kills made with the AWP.',
+  smoke_pr: 'Smokes thrown per round.',
+  flash_pr: 'Flashbangs thrown per round.',
+  fire_pr: 'Molotovs / incendiaries thrown per round.',
+  he_pr: 'HE grenades thrown per round.'
+};
+/* 细项悬浮文案：中文说明 + 空行 + 英文自述 */
+const abItemTip = it => {
+  const zh = it.desc || '';
+  const en = AB_EN_DESC[it.key];
+  return en ? (zh + '\n\nEN: ' + en) : zh;
+};
+const abVal = (v, unit) => {
+  if (v == null || v === '' || !isFinite(Number(v))) return '—';
+  const n = Number(v);
+  return esc((Number.isInteger(n) ? String(n) : String(+(+n.toFixed(2)))) + (unit || ''));
+};
+
+function hideAbility() {
+  const sec = $('#s-ability');
+  if (sec) sec.hidden = true;
+}
+
+async function renderAbility() {
+  const sec = $('#s-ability'), box = $('#abDims');
+  if (!sec || !box) return;
+  const seq = ++AB_SEQ;                  // 切人/刷新时只认最后一次请求，防止旧响应回填
+  let d;
+  try {
+    d = await api('/api/v1/ability' + (SIDE ? '?side=' + SIDE : ''));
+  } catch (e) {
+    return hideAbility();                // 接口不存在或网络失败：不弹错、不留空框
+  }
+  if (seq !== AB_SEQ) return;
+  if (!d || d.error || !Array.isArray(d.dimensions) || !d.dimensions.length) {
+    return hideAbility();
+  }
+  const sm = d.sample || {};
+  $('#abSample').textContent = (sm.person_rounds || sm.players)
+    ? `${nth(sm.person_rounds || 0)} 个人回合 · 对照 ${nth(sm.players || 0)} 名玩家`
+    : '';
+  box.innerHTML = d.dimensions.map(dim => {
+    const score = Math.max(0, Math.min(100, Number(dim.score) || 0));
+    const cls = abStepCls(dim.step != null ? dim.step : abStepFromZ(dim.z));
+    const items = (dim.items || []).map(it => {
+      const p = Number(it.pct);
+      const w = Number.isFinite(p) ? Math.max(0, Math.min(100, p)) : 0;
+      return `<div class="abi">
+        <div class="abit"><span class="k">${esc(it.name || '')}${
+          AB_EN[it.key] ? `<i class="ka">${AB_EN[it.key]}</i>` : ''}</span>${abQ(abItemTip(it))}
+          <span class="v">${abVal(it.value, it.unit)}</span></div>
+        <div class="abis"><i style="width:${w.toFixed(1)}%"></i></div></div>`;
+    }).join('');
+    return `<div class="abc">
+      <div class="abh"><div class="abn">${abIcon(dim.key)}${esc(dim.name || '')}<i class="ka abd">${AB_DIM_EN[dim.key] || ''}</i>${abQ(abDimTip(dim.key, dim.desc))}</div>
+        <div class="abs"><b>${Math.round(score)}</b><span>/ 100</span><i class="abcaret"></i></div></div>
+      <div class="abbar"><i class="${cls}" style="width:${score.toFixed(1)}%"></i></div>
+      <div class="abil">${items}</div></div>`;
+  }).join('');
+  // 卡片默认折叠，点头部（维度名 / 分数那一行）逐个展开；事件只绑一次
+  if (!box._abBound) {
+    box._abBound = true;
+    box.addEventListener('click', ev => {
+      const head = ev.target.closest('.abh');
+      if (!head) return;
+      const card = head.closest('.abc');
+      if (card) card.classList.toggle('open');
+    });
+  }
+  sec.hidden = false;
 }
 
 /* ================= 走势折线 ================= */
@@ -416,14 +642,27 @@ function rAvg(v) {
 /* 阵营切换：单击循环 */
 const SIDE_ORDER = ['', 'CT', 'T'];
 function updateSideSel() {
-  $$('#sideSel span[data-side]').forEach(s =>
-    s.classList.toggle('on', (s.dataset.side || '') === SIDE));
+  // 两处分边控件（平均 / 能力画像）共用同一个 SIDE，必须一起点亮
+  ['#sideSel', '#abSide'].forEach(sel =>
+    $$(sel + ' span[data-side]').forEach(s =>
+      s.classList.toggle('on', (s.dataset.side || '') === SIDE)));
 }
 $('#sideSel').onclick = () => {
   SIDE = SIDE_ORDER[(SIDE_ORDER.indexOf(SIDE) + 1) % SIDE_ORDER.length];
+  updateSideSel();
   renderAll();
 };
 
+/* 能力画像标题右侧的分边切换：跟「平均」那套共用全局 SIDE，
+   点哪个都会同步另一处高亮，全页一起重渲染。 */
+const AB_SIDE_EL = $('#abSide');
+if (AB_SIDE_EL) {
+  AB_SIDE_EL.onclick = () => {
+    SIDE = SIDE_ORDER[(SIDE_ORDER.indexOf(SIDE) + 1) % SIDE_ORDER.length];
+    updateSideSel();
+    renderAll();
+  };
+}
 /* ================= 武器：‹ 名字 › 切换 + 大卡 ================= */
 let WIDX = 0;
 function wlist() {

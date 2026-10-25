@@ -22,7 +22,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
 
-VERSION = "6.2.5"
+VERSION = "6.2.6"
 # 开源发布仓库（检查新版本用）
 REPO_SLUG = "N2-O/cross-section"
 RELEASES_URL = f"https://github.com/{REPO_SLUG}/releases"
@@ -842,6 +842,24 @@ def api_analyze(names: list[str], force: bool = False):
     return {"ok": True, "queued": len(todo)}
 
 
+def _ability2_mod():
+    """能力画像七维模块。
+
+    ability2.py 可能还没装 / 还在开发：导不到就返回 None，
+    路由返回 {"error": "ability2 not installed"}，既不能 500 也不能起不来。
+    """
+    try:
+        import ability2                      # 同目录并列导入（和 import ability 一致）
+        return ability2
+    except Exception:
+        pass
+    try:
+        from cs2tool import ability2 as _ab  # 以包方式启动时的退路
+        return _ab
+    except Exception:
+        return None
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "CS2Tool/1.0"
 
@@ -877,6 +895,32 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/v1/map_pool":
                 import export_csv
                 return self._send(*_json({"ok": True, "maps": export_csv.map_pool(DB_PATH)}))
+            if path == "/api/v1/ability":
+                # 能力画像七维：默认「我」，可 ?steamid= 指定人、?match= 指定单场
+                _ab2 = _ability2_mod()
+                if _ab2 is None or not hasattr(_ab2, "compute"):
+                    return self._send(*_json({"error": "ability2 not installed"}))
+                try:
+                    _sid = int((qs.get("steamid") or ["0"])[0] or 0) or _me(_conn)
+                except (TypeError, ValueError):
+                    return self._send(*_json({"error": "steamid 必须是数字"}))
+                if not _sid:
+                    return self._send(*_json({"error": "不知道该看谁：设置里没配 steamid"}))
+                _ms = (qs.get("match") or [""])[0].strip()
+                try:
+                    _mid = int(_ms) if _ms else None
+                except ValueError:
+                    return self._send(*_json({"error": "match 必须是场次 id"}))
+                # 分边：?side=T / ?side=CT，缺省或空 = 双侧合计
+                _side = (qs.get("side") or [""])[0].strip().upper()
+                if _side not in ("", "T", "CT"):
+                    return self._send(*_json({"error": "side 只能是 T 或 CT"}))
+                try:
+                    with _lock:
+                        _r = _ab2.compute(_conn, _sid, _mid, _side or None)
+                except Exception as e:
+                    return self._send(*_json({"error": "%s: %s" % (type(e).__name__, e)}))
+                return self._send(*_json(_r))
             if path.startswith("/api/v1"):
                 with _lock:
                     r = api_v1.dispatch(_conn, path, qs)

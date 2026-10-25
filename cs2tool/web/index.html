@@ -61,11 +61,11 @@
 #pgRow .ri .v{font-size: 24px;font-variant-numeric:tabular-nums;margin-top:1px;
   font-family:inherit;font-weight:550}
 #pgRow .ri .s{font-size: 12px;color:var(--dim);opacity:.65;margin-top:1px}
-#sideSel{font-size: 13px;font-weight:700;cursor:pointer;user-select:none;
+#sideSel,#abSide{font-size: 13px;font-weight:700;cursor:pointer;user-select:none;
   display:inline-flex;gap:9px;align-items:center}
-#sideSel span{color:var(--dim);transition:color .13s}
-#sideSel span.on{color:var(--txt)}
-#sideSel .sep{color:rgba(255,255,255,.22);font-weight:400}
+#sideSel span,#abSide span{color:var(--dim);transition:color .13s}
+#sideSel span.on,#abSide span.on{color:var(--txt)}
+#sideSel .sep,#abSide .sep{color:rgba(255,255,255,.22);font-weight:400}
 /* 受闪面板的阵营切换：选中项加粗加大，跟着 02 平均那套 */
 #recvSide{font-size: 13px;font-weight:700;cursor:pointer;user-select:none;
   display:inline-flex;gap:9px;align-items:baseline}
@@ -280,6 +280,12 @@
     <div class="card" style="margin-top:12px">
       <div class="bd"><div id="trChart"></div></div>
     </div>
+  </section>
+
+  <!-- 能力画像 -->
+  <section class="sec" id="s-ability" hidden>
+    <h2>能力画像 <span class="r"><span id="abSide"><span data-side="" class="on">全部</span><span class="sep">|</span><span data-side="CT">CT</span><span class="sep">|</span><span data-side="T">T</span></span><span id="abSample"></span></span></h2>
+    <div id="abDims"></div>
   </section>
 
   <!-- 平均 -->

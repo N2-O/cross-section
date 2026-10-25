@@ -534,7 +534,7 @@ def build_csv(db_path: str, only_me: bool = False, match_ids: list[int] | None =
     buf.write("#            不受「近 N 局」窗口影响；需要随时间对比请看 avg_* 汇总行。\n")
     buf.write("#\n")
     buf.write("# ---------- 文件属性 ----------\n")
-    buf.write("# 生成器   : Cross-Section v6.2.5（本地 CS2 demo 分析工具）\n")
+    buf.write("# 生成器   : Cross-Section v6.2.6（本地 CS2 demo 分析工具）\n")
     buf.write(f"# 导出时间 : {now}\n")
     buf.write(f"# 导出者   : {exporter or me_name}\n")
     buf.write(f"# 解析器   : {PARSER_VERSION}\n")

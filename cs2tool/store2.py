@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS rounds (
     t_start  INTEGER, t_freeze INTEGER, t_end INTEGER,
     winner   TEXT, reason TEXT,
     a_side   TEXT, a_win INTEGER,
+    bomb_tick INTEGER,                       -- 炸弹安放完成的 tick（没有安包为 NULL）
     PRIMARY KEY (match_id, round)
 );
 
@@ -255,7 +256,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "players": [("left_round", "INTEGER"), ("joined_round", "INTEGER"),
                     ("left_reason", "TEXT"), ("reconnect_round", "INTEGER")],
         # 回合被暂停的秒数（从回合时长推断，正常上限 115 秒）
-        "rounds": [("paused_sec", "REAL")],
+        "rounds": [("paused_sec", "REAL"), ("bomb_tick", "INTEGER")],
         # 回合末采样补齐经济口径：回合初/冻结时的装备与现金、钱包法花费
         "round_end": [("equip_start", "INTEGER"), ("equip_fz", "INTEGER"),
                       ("cash_start", "INTEGER"), ("cash_fz", "INTEGER"),
