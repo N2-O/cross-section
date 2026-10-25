@@ -149,6 +149,25 @@ def _f(v, default=0.0) -> float:
         return default
 
 
+def _side_of(fs, rnd, half: int = 12) -> str:
+    """某人第 rnd 回合的阵营。fs = 第一半场阵营（"T"/"CT"）。
+
+    CS2 常规 12 回合半场；加时每 3 回合换边，起点延续第二半场。
+    与 ingest_awpy 内部的 side_of 同义 —— 提到模块级是为了让 damage 段
+    （判友伤）也能用，那段在内部 side_of 定义之前执行。
+    """
+    s = fs or "T"
+    o = "CT" if s == "T" else "T"
+    if rnd <= half:
+        return s
+    if half == 12:
+        if rnd <= 24:
+            return o
+        ot = (rnd - 25) // 3
+        return o if ot % 2 == 0 else s
+    return o
+
+
 def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
                 my_steamid: int | None = None, log=print,
                 force: bool = False) -> int:
@@ -432,6 +451,15 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
                 left = remain.get(key, 100)
                 r["valid"] = max(0, min(raw, left))
                 remain[key] = left - r["valid"]
+        # 友伤：同阵营的伤害不计入个人伤害 —— CS2 官方 ADR/HUD 只统计对敌人的伤害。
+        # pside 存的是各人「第一半场阵营」，配合 _side_of 还原该回合的实际阵营，
+        # 换边后（R13 起）判断依然正确。自杀同理归零（a == v 时阵营相同）。
+        a = r["attacker_steamid"]
+        if r["valid"] and a and v:
+            sa, sv = pside.get(a), pside.get(v)
+            # 缺任一方阵营信息就不判（宁可照算，也不能凭默认值误判成友伤）
+            if sa and sv and _side_of(sa, r["round"]) == _side_of(sv, r["round"]):
+                r["valid"] = 0
         dmg_valid_sum += r["valid"]
     store2.insert_many(conn, "damage", drows)
     if dmg_raw_sum:
@@ -1253,5 +1281,5 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
             conn.execute("UPDATE pms SET impact=?, rating=? WHERE match_id=? AND steamid=?",
                          (round(impact, 3), round(rating, 3), mid, r["steamid"]))
 
-    log(f"  match {mid}: {len(bounds)} 回合 / {len(krows)} 击杀 / {len(drows)} 伤害 / {len(prows)} 人")
+    log(f"  match {mid}: {len(bounds)} 回合 / {len(krows)} 击杀 / {len(drows)} 条伤害事件 / {len(prows)} 人")
     return mid
