@@ -93,17 +93,18 @@ METRICS: dict[str, dict] = {
                  source="按整场比分判定：我方回合数 > 对方则胜，相等为平局", min_sample=1),
 
     "spent": dict(name="总支出", cat="经济", unit="$",
-                 definition="统计范围内买装备花掉的现金总额（武器 + 道具 + 甲 + 钳子）",
-                 formula="各回合花费求和",
+                 definition="统计范围内买装备花掉的现金总额（武器 + 道具 + 甲 + 钳子，已扣退款）",
+                 formula="各回合（回合开始现金 − 冻结结束现金）求和",
                  numerator="spent_total", denominator=None,
-                 source="purchases 的 cost 求和，甲与钳子由现金支出差值补算",
+                 source="round_end.spend 求和（钱包法：回合开始现金 − 冻结结束现金）；"
+                        "含护甲与拆弹钳，买了又退的已扣除",
                  note="是累计值，场次越多越大；比较不同时期请用每回合平均支出", min_sample=1),
 
     "spent_avg": dict(name="每回合平均支出", cat="经济", unit="$/回合",
-                 definition="单个回合平均花掉多少现金（含武器、道具、甲、钳子）",
+                 definition="单个回合平均花掉多少现金（含武器、道具、甲、钳子，已扣退款）",
                  formula="总支出 ÷ 总回合",
                  numerator="spent_total", denominator="rounds",
-                 source="purchases 的 cost 求和 ÷ 回合数", min_sample=1),
+                 source="钱包法花费（回合开始现金 − 冻结结束现金）求和 ÷ 回合数", min_sample=1),
 
     "adr": dict(name="ADR", cat="伤害", unit="伤害/回合",
                 definition="每个个人计入回合平均造成的敌方伤害",
@@ -450,12 +451,12 @@ METRICS: dict[str, dict] = {
 
     # ============================================================ 经济
     "spend": dict(name="个人支出", cat="经济", unit="$",
-                  definition="本回合实际购买物品的花费",
-                  formula="购买事件的 cost 求和",
+                  definition="本回合买装备花掉的现金（含护甲与拆弹钳，已扣退款）",
+                  formula="回合开始现金 − 冻结结束现金",
                   numerator="spend", denominator=None,
-                  source="awpy.item_events 中 action=purchase 的 cost",
-                  note="含枪械与投掷物，不含护甲/拆弹钳（那些不是武器实体）；"
-                       "同一 tick 的多笔购买可能合并计一次", min_sample=1),
+                  source="round_end.spend（钱包法：回合开始现金 − 冻结结束现金）",
+                  note="含护甲与拆弹钳；买了又退的已扣除，不算钱；"
+                       "purchases 表只用于解释花费构成，不再相加当花费", min_sample=1),
 
     "equip_value": dict(name="装备价值", cat="经济", unit="$",
                         definition="冻结时间结束时个人当前装备的购置价估值",
@@ -478,11 +479,12 @@ METRICS: dict[str, dict] = {
                        source="按 side 分组的 equipment_value 求和",
                        note="这是团队口径，不能当成个人消费", min_sample=1),
 
-    "buy_type": dict(name="团队购买档", cat="经济", unit="档",
-                     definition="按团队装备价值划分的购买类型",
-                     formula="<5000 eco / 5000-20000 force / ≥20000 full，手枪局单独识别",
-                     numerator="team_equip", denominator=None,
-                     source="awpy round_economy 口径（产品规则版本化）",
+    "buy_type": dict(name="个人购买档", cat="经济", unit="档",
+                     definition="按个人买完后的装备价值（equip_fz）划分的购买类型",
+                     formula="≥4500 全买 / 3000-4500 半买 / 1500-3000 强起 / <1500 ECO；"
+                             "第 1、13 回合强制手枪局",
+                     numerator="equip_fz", denominator=None,
+                     source="round_end.equip_fz（个人冻结结束时的装备价值）",
                      note="这不是 CS2 内置的唯一分类标准，属于产品规则", min_sample=1),
 
     "eco_win_pct": dict(name="ECO 胜率", cat="经济", unit="%",

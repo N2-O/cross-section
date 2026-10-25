@@ -528,19 +528,21 @@ def detail(conn: sqlite3.Connection, steamid: int) -> dict:
             "dmg": dmg, "fk": fm["fk"] or 0, "fd": fm["fd"] or 0}
 
 
-def _buy_type(round_no: int, start_eq, spend) -> str:
-    """按人均装备价值分档（装备价值直接反映购买强度，比余额差更可靠）。
+def _buy_type(round_no: int, equip_fz) -> str | None:
+    """按个人冻结结束时的装备价值分档（个人口径，能分辨「全队 ECO 但我起了英雄 AK」）。
 
-    start_eq 是该阵营 5 人的装备价值合计。
+    equip_fz 是本回合买完后（冻结结束）本人身上的装备价值；None 表示该回合没有采样。
+    阈值：第 1/13 回合强制手枪局；≥4500 全买；≥3000 半买；≥1500 强起；其余 ECO。
     """
+    if equip_fz is None:
+        return None
     if round_no in (1, 13):
         return "手枪局"
-    per_eq = (start_eq or 0) / 5.0
-    if per_eq >= 3500:
+    if equip_fz >= 4500:
         return "全买"
-    if per_eq >= 2000:
+    if equip_fz >= 3000:
         return "半买"
-    if per_eq >= 1000:
+    if equip_fz >= 1500:
         return "强起"
     return "ECO"
 
@@ -558,14 +560,19 @@ def econ_stats(conn: sqlite3.Connection, steamid: int) -> dict:
     ):
         flags[r["mid"]] = (r["fs"] == r["a0"]) if (r["fs"] and r["a0"]) else True
 
-    # ---- 经济局：按 buy_type 分组的胜负 ----
-    # 花费取 spend_cat（含护甲/头盔/拆弹钳，用 m_iCashSpentThisRound 与 purchases 的差值反推），
-    # 比 economy.pre_bal/post_bal 可靠 —— 后者实际存的是「回合初装备价值」和「冻结时现金」，
-    # 两个不同量纲相减算不出花费（曾导致每回合花费算出 $331、装备保留率 10276%）。
-    spent_side: dict[tuple, int] = {}
+    # ---- 经济局：按 buy_type 分组的胜负（个人口径）----
+    # 统计单位是「我的每回合」：按我自己该回合买完后的装备价值（round_end.equip_fz）分档，
+    # 所以能分辨「全队 ECO 但我起了英雄 AK」。花费用钱包法 round_end.spend。
+    my_round: dict[tuple, tuple] = {}
     for r in conn.execute(
-            "SELECT match_id, side, SUM(cost) c FROM spend_cat GROUP BY match_id, side"):
-        spent_side[(r["match_id"], r["side"])] = r["c"] or 0
+            """SELECT re.match_id, re.round, re.equip_fz, re.spend
+               FROM round_end re
+               WHERE re.steamid = ?
+                 AND re.match_id IN (SELECT id FROM matches
+                                     WHERE excluded IS NULL OR excluded=0)""",
+            (steamid,)
+    ):
+        my_round[(r["match_id"], r["round"])] = (r["equip_fz"], r["spend"])
 
     buy = {}
     spent_tot = saved_tot = eq_tot = 0.0
@@ -584,14 +591,15 @@ def econ_stats(conn: sqlite3.Connection, steamid: int) -> dict:
         if r["sd"] != my_side:
             continue
         won = bool(r["a_win"]) if is_a else not bool(r["a_win"])
-        spend = 0          # 真实花费在循环外单独汇总，见下
-        bt = _buy_type(r["rd"] or 0, r["end_eq"], 0)
-        b = buy.setdefault(bt, {"n": 0, "w": 0, "spent": 0, "eq": 0})
-        b["n"] += 1
-        b["w"] += 1 if won else 0
-        b["spent"] += spend
-        b["eq"] += r["end_eq"] or 0
-        spent_tot += spend
+        equip_fz, spend = my_round.get((r["mid"], r["rd"]), (None, None))
+        bt = _buy_type(r["rd"] or 0, equip_fz)
+        if bt:
+            b = buy.setdefault(bt, {"n": 0, "w": 0, "spent": 0, "eq": 0})
+            b["n"] += 1
+            b["w"] += 1 if won else 0
+            b["spent"] += spend or 0
+            b["eq"] += equip_fz or 0
+        spent_tot += spend or 0
         saved_tot += r["end_eq"] or 0
         eq_tot += r["start_eq"] or 0
         econ_n += 1
@@ -613,9 +621,9 @@ def econ_stats(conn: sqlite3.Connection, steamid: int) -> dict:
                                 WHERE excluded IS NULL OR excluded=0)""",
         (steamid, steamid)).fetchone()
     spent_tot = float(team["spent"] or 0)
-    equip_sum = float(team["equip_sum"] or 0)
+    equip_sum = float(team["equip_sum"] or 0)      # 5 人 × 各回合的人均装备 = 团队合计
     inherit_sum = float(team["inherit_sum"] or 0)
-    saved_tot = equip_sum / 5          # equip_value 是人均，5 人合计要再除 5
+    saved_tot = equip_sum              # equip_value 已是人均、×rounds 再对 5 人求和即团队值，不再除 5
     # 装备保留率 = 继承装备 ÷ 回合末装备 —— 「每回合的装备里有多少是上回合带过来的」
     inv_rate = round(inherit_sum / equip_sum * 100, 1) if equip_sum else None
 
@@ -625,8 +633,8 @@ def econ_stats(conn: sqlite3.Connection, steamid: int) -> dict:
         buys.append({"type": bt, "n": b["n"], "w": b["w"],
                      "wr": round(b["w"] / b["n"] * 100) if b["n"] else 0,
                      "spent": round(b["spent"] / max(b["n"], 1)),
-                     # end_eq 是「队伍 5 人合计」，要再除 5 才是人均
-                     "eq": round(b["eq"] / max(b["n"], 1) / 5)})
+                     # 个人口径：equip_fz 本身就是本人装备价值，不用再除 5
+                     "eq": round(b["eq"] / max(b["n"], 1))})
 
     # ---- 首杀胜率（我拿首杀 vs 敌方拿首杀）----
     # 同队判定：players.first_side 相同 = 同队（一局内队伍不变，只换边）
@@ -788,25 +796,26 @@ def econ_rounds(conn: sqlite3.Connection, steamid: int,
         where.append("rd.match_id IN (%s)" % ",".join("?" * len(match_ids)))
         args.extend(match_ids)
 
-    my_spend: dict[tuple, int] = {}
-    for r in conn.execute(
-            """SELECT match_id, round, COALESCE(SUM(cost),0) c FROM purchases
-               WHERE steamid=? AND action='purchase'
-               GROUP BY match_id, round""", (steamid,)):
-        my_spend[(r["match_id"], r["round"])] = r["c"]
-
+    # 团队花费：我队 5 人同一回合的钱包法花费合计（同 players.first_side = 同队）
     team_spend: dict[tuple, int] = {}
     for r in conn.execute(
-            """SELECT match_id, round, side, COALESCE(SUM(cost),0) c
-               FROM purchases WHERE action='purchase'
-               GROUP BY match_id, round, side"""):
-        team_spend[(r["match_id"], r["round"], (r["side"] or "").upper())] = r["c"]
+            """SELECT re.match_id, re.round, SUM(re.spend) c
+               FROM round_end re
+               JOIN players p ON p.match_id = re.match_id AND p.steamid = re.steamid
+               WHERE re.spend IS NOT NULL
+                 AND p.first_side = (SELECT first_side FROM players
+                                     WHERE match_id = re.match_id AND steamid = ?)
+               GROUP BY re.match_id, re.round""", (steamid,)):
+        team_spend[(r["match_id"], r["round"])] = r["c"]
 
+    # 回合末状态 + 冻结时装备 + 钱包法花费（round_end 每人每回合一行，一次查完）
+    # spend = 回合开始现金 − 冻结结束现金；NULL 表示没有采样，输出 None 而不是 0
     end_state: dict[tuple, tuple] = {}
     for r in conn.execute(
-            "SELECT match_id, round, alive, equip FROM round_end WHERE steamid=?",
+            "SELECT match_id, round, alive, equip, equip_fz, spend FROM round_end WHERE steamid=?",
             (steamid,)):
-        end_state[(r["match_id"], r["round"])] = (r["alive"], r["equip"])
+        end_state[(r["match_id"], r["round"])] = (
+            r["alive"], r["equip"], r["equip_fz"], r["spend"])
 
     # economy 每回合有 T/CT 两行，key 必须带 side，否则拿到对手的档位
     buy_map: dict[tuple, tuple] = {}
@@ -825,17 +834,15 @@ def econ_rounds(conn: sqlite3.Connection, steamid: int,
         k = (r["match_id"], r["round"])
         side = (r["a_side"] or "").upper()
         bt, start_eq = buy_map.get((r["match_id"], r["round"], side), (None, None))
-        alive, equip = end_state.get(k, (None, None))
-        spent = my_spend.get(k, 0)
+        alive, equip, equip_fz, spent = end_state.get(k, (None, None, None, None))
         won = bool(r["a_win"])
         out.append({
             "match_id": r["match_id"], "round_number": r["round"],
             "map": r["map"] or "", "played_at": r["played_at"] or "",
             "my_side": side, "win": won,
             "player_spend": spent,
-            "player_buy_type": ("eco" if spent < 1000 else
-                                "force" if spent < 3200 else
-                                "half" if spent < 4500 else "full"),
+            # 个人分档：按我自己该回合买完后的装备价值（round_end.equip_fz）
+            "player_buy_type": _buy_type(r["round"] or 0, equip_fz),
             # start_eq 是 5 人合计，÷5 成人均
             "player_equipment_value_round_start":
                 (round((start_eq or 0) / 5.0, 1) if start_eq is not None else None),
@@ -844,7 +851,7 @@ def econ_rounds(conn: sqlite3.Connection, steamid: int,
             "player_equipment_value_end": equip,
             "player_alive": (bool(alive) if alive is not None else None),
             "team_buy_type": bt,
-            "team_spend": team_spend.get((r["match_id"], r["round"], side), 0),
+            "team_spend": team_spend.get(k),
             "saved": (not won and alive == 1 and (equip or 0) > 0),
         })
     return out
@@ -1052,13 +1059,35 @@ def duel_stats(conn, steamid: int) -> dict:
     weak_death_exact = round(lose_strong / died_total * 100)
 
     # ---- 经济不对称：我方 ECO/强起 vs 对方全买 ----
+    # 分档已改个人口径，这里比较的是「该回合该阵营 5 人的人均 equip_fz」，
+    # 不再用 economy.start_eq/end_eq 的团队合计再除 5 近似。
     flags = {}
+    a0_side = {}
     for r in conn.execute(
         """SELECT m.id mid,
                   (SELECT first_side FROM players p WHERE p.match_id=m.id AND p.steamid=?) fs,
                   (SELECT a_side FROM rounds r WHERE r.match_id=m.id ORDER BY round LIMIT 1) a0
            FROM matches m""", (steamid,)):
         flags[r["mid"]] = (r["fs"] == r["a0"]) if (r["fs"] and r["a0"]) else True
+        a0_side[r["mid"]] = r["a0"]
+
+    # 每回合每阵营的人均装备（round_end.equip_fz 按 side 汇总求人均）。
+    # 某人某回合的阵营 = 该回合 a_side；若他的 first_side ≠ 首回合 a_side，则是另一边。
+    fz_acc: dict[tuple, list] = {}
+    for r in conn.execute(
+            """SELECT re.match_id mid, re.round rd, re.equip_fz fz,
+                      p.first_side fs, r.a_side a_side
+               FROM round_end re
+               JOIN rounds r ON r.match_id = re.match_id AND r.round = re.round
+               JOIN players p ON p.match_id = re.match_id AND p.steamid = re.steamid
+               WHERE re.equip_fz IS NOT NULL
+                 AND re.match_id IN (SELECT match_id FROM players WHERE steamid = ?)""",
+            (steamid,)):
+        a_sd = (r["a_side"] or "T").upper()
+        sd = a_sd if r["fs"] == a0_side.get(r["mid"]) else ("CT" if a_sd == "T" else "T")
+        cell_fz = fz_acc.setdefault((r["mid"], r["rd"], sd), [0, 0])
+        cell_fz[0] += r["fz"]
+        cell_fz[1] += 1
 
     rounds = {}
     for r in conn.execute(
@@ -1069,7 +1098,8 @@ def duel_stats(conn, steamid: int) -> dict:
         is_a = flags.get(r["mid"], True)
         a_side = r["a_side"] or "T"
         my_side = a_side if is_a else ("CT" if a_side == "T" else "T")
-        bt = _buy_type(r["rd"] or 0, r["end_eq"], 0)
+        agg_fz = fz_acc.get((r["mid"], r["rd"], (r["sd"] or "").upper()))
+        bt = _buy_type(r["rd"] or 0, (agg_fz[0] / agg_fz[1]) if agg_fz and agg_fz[1] else None)
         cell = rounds.setdefault((r["mid"], r["rd"]), {})
         cell["mine" if r["sd"] == my_side else "opp"] = bt
 

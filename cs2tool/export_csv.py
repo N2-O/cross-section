@@ -85,16 +85,18 @@ COLUMNS = [
     ("thrusmoke_kills", "穿烟击杀", "击杀发生时视线穿过烟雾"),
     ("noscope_kills", "盲狙击杀", "狙击枪未开镜状态下完成的击杀数"),
 
-    ("spent", "个人总支出", "item_events 中 purchase 的 cost 求和（含投掷物与装备）"),
+    ("spent", "个人总支出", "钱包法：回合开始现金 − 冻结结束现金。含护甲与拆弹钳，已扣退款"
+                          "（买了又退的枪不算钱）；不是 purchases 的 cost 求和"),
     ("equip_value", "回合末装备价值", "回合结束时（结算前 -64 tick）该玩家身上的装备价值；"
                                    "本回合阵亡则为 0。不是「购买结束时」的快照——"
                                    "那个值 demo 里没现成字段，需要按 freeze time 末的 tick 另取"),
     ("equip_round_start", "场初继承装备", "回合开始时从上一回合保留的装备价值均值（团队 start_eq ÷ 5）"),
     ("round_number", "回合序号", "该场比赛内的回合编号，可与事件表直接关联（仅 econ_round 段）"),
-    ("player_buy_type", "个人购买档", "按个人本回合实际花费分档："
-                                     "eco<1000 / force<3200 / half<4500 / full≥4500"),
+    ("player_buy_type", "个人购买档", "按个人买完后的装备价值（equip_fz）分档："
+                                     "≥4500 全买 / 3000-4500 半买 / 1500-3000 强起 / <1500 ECO；"
+                                     "第 1、13 回合为手枪局"),
     ("team_buy_type", "团队购买档", "队伍层面的购买类别（pistol/eco/force/half/full），"
-                                  "取自 economy 表同一阵营那一行"),
+                                  "取自 economy 表同一阵营那一行（团队口径，不是个人档）"),
 
     ("plants", "安包次数", "finish_plant 事件计数"),
     ("defuses", "拆包次数", "defuse 事件计数"),
@@ -131,7 +133,9 @@ COLUMNS = [
                             "不用「致盲人次 ÷ 投出数」——一颗闪可以闪多人，那样会算出 90%+ 的虚高值"),
     ("damage_per_round", "局均伤害", "该类别每回合伤害（仅 weapon/utility 段）"),
     ("save_count", "保枪次数", "该局面下保枪次数（仅 clutch 段）"),
-    ("cost", "花费金额", "该类别花掉的钱（仅 spendcat 段）"),
+    ("save_eq", "保枪装备价值", "该局面下保下来的装备购置价合计（仅 clutch 段）。"
+                             "这是「留在身上的装备值多少钱」，不是「花掉多少钱」——与 cost 列（花费金额）不是一回事"),
+    ("cost", "花费金额", "该类别/该回合计花掉的钱（仅 spendcat 段与 econ_round 段的团队花费）"),
     ("pct", "占比", "0-100（仅 spendcat/duel 段）"),
 
     ("parser_version", "解析器版本", "产出该行数据的 demo 解析器版本（awpy / demoparser2）"),
@@ -177,7 +181,7 @@ def build_csv(db_path: str, only_me: bool = False, match_ids: list[int] | None =
     # parser = 读 demo 的库；metric = 统计口径与公式；export = 这份 CSV 的列结构
     PARSER_VERSION = "awpy-3.1.1+demoparser2-0.42.0"
     METRIC_SCHEMA_VERSION = "m2"      # 2026-10 修过 a_side 换边、装备人均、平局语义
-    EXPORT_SCHEMA_VERSION = "e4"      # 2026-10 加 scope 列、汇总行、窗口切片、只读标识
+    EXPORT_SCHEMA_VERSION = "e5"      # 2026-10 保枪装备价值独立为 save_eq 列（不再占用 cost）
     conn = store2.connect(db_path)
 
     # ---- 目标玩家：优先 settings 里的 my_steamid，其次库里的 is_me
@@ -332,7 +336,9 @@ def build_csv(db_path: str, only_me: bool = False, match_ids: list[int] | None =
                               "clutch_win_rate": (round(wn / pl * 100, 1) if pl else None),
                               "win_rate": (round(wn / pl * 100, 1) if pl else None),
                               "kills": d.get("kills"), "save_count": d.get("saves"),
-                              "cost": d.get("save_eq")})
+                              # 保枪装备价值别塞进 cost 列：cost 是「花掉多少钱」，
+                              # 这里是「留在身上的装备值多少钱」，同一列两种含义会误读
+                              "save_eq": d.get("save_eq")})
         try:
             det = stats_api.detail(conn, me_sid)
         except Exception:
@@ -516,7 +522,7 @@ def build_csv(db_path: str, only_me: bool = False, match_ids: list[int] | None =
     buf.write("#   6. 改进建议：按优先级排列，每一条都必须指向文件里的具体数字\n")
     buf.write("# 硬性要求：\n")
     buf.write("#   · 引用任何数字之前先读下面的「字段口径」，避免误读\n")
-    buf.write("#     （例如经济数值是全队 5 人合计，不是个人）\n")
+    buf.write("#     （口径要分清：economy 表与 team_* 字段是 5 人合计的团队值；spent / equip_value 是个人值，spent 不是团队花费）\n")
     buf.write("#   · 场次不足 5 场时不要下强结论，直接写「样本不足，无法判断」\n")
     buf.write("#   · 不要编造文件里没有的信息；缺失就写「数据中未提供」\n")
     buf.write("# ------------------------------------------------------------\n")
@@ -528,7 +534,7 @@ def build_csv(db_path: str, only_me: bool = False, match_ids: list[int] | None =
     buf.write("#            不受「近 N 局」窗口影响；需要随时间对比请看 avg_* 汇总行。\n")
     buf.write("#\n")
     buf.write("# ---------- 文件属性 ----------\n")
-    buf.write("# 生成器   : Cross-Section v6.2.4（本地 CS2 demo 分析工具）\n")
+    buf.write("# 生成器   : Cross-Section v6.2.5（本地 CS2 demo 分析工具）\n")
     buf.write(f"# 导出时间 : {now}\n")
     buf.write(f"# 导出者   : {exporter or me_name}\n")
     buf.write(f"# 解析器   : {PARSER_VERSION}\n")

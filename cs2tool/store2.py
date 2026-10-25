@@ -201,6 +201,11 @@ CREATE TABLE IF NOT EXISTS round_end (
     steamid  INTEGER NOT NULL,
     alive    INTEGER,          -- 1=回合结束前仍活着
     equip    INTEGER,          -- 当时携带的装备价值（可保留部分）
+    equip_start INTEGER,       -- 回合开始时继承下来的装备价值（equipment_value_round_start）
+    equip_fz  INTEGER,         -- buytime 结束时的装备价值（本回合真正买完后的装备）
+    cash_start INTEGER,        -- 回合开始时的现金（钱包法算花费的起点）
+    cash_fz   INTEGER,         -- buytime 结束（回合开始+20 秒）时的现金
+    spend     INTEGER,         -- 本回合花费（引擎 m_iCashSpentThisRound 优先，钱包法兜底）
     PRIMARY KEY (match_id, round, steamid)
 );
 CREATE INDEX IF NOT EXISTS idx_rte ON round_end(match_id, steamid);
@@ -245,6 +250,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
                     ("left_reason", "TEXT"), ("reconnect_round", "INTEGER")],
         # 回合被暂停的秒数（从回合时长推断，正常上限 115 秒）
         "rounds": [("paused_sec", "REAL")],
+        # 回合末采样补齐经济口径：回合初/冻结时的装备与现金、钱包法花费
+        "round_end": [("equip_start", "INTEGER"), ("equip_fz", "INTEGER"),
+                      ("cash_start", "INTEGER"), ("cash_fz", "INTEGER"),
+                      ("spend", "INTEGER")],
         # 排除出统计的局（投降、摆烂、半路不打了）：
         # 打完但自己没认真打的数据留在库里，但默认不参与平均/走势/能力画像
         "matches": [("excluded", "INTEGER DEFAULT 0"), ("exclude_note", "TEXT")],

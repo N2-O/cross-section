@@ -46,7 +46,7 @@ body{margin:0;color:var(--txt);overflow:hidden;
 .sd.ct{color:#e6e7e9;background:rgba(91,143,212,.22);border:1px solid #383940}
 .sd.terr{color:#ffe9b8;background:rgba(216,168,60,.22);border:1px solid #6b5722}
 #mid{display:flex;align-items:center;gap:14px;padding:0 22px;background:rgba(0,0,0,.5);
-     border-left:1px solid #2c2d2f;border-right:1px solid #2c2d2f;min-width:350px;justify-content:center}
+     min-width:350px;justify-content:center}
 #mid .rnd{font-size: 13px;color:var(--dim);white-space:nowrap}
 #mid .rnd b{color:var(--txt);font-size: 15px}
 #mid .clk{font-size: 24px;font-weight:700;font-variant-numeric:tabular-nums;min-width:60px;text-align:center;
@@ -61,8 +61,6 @@ body{margin:0;color:var(--txt);overflow:hidden;
 #main{display:flex;min-height:0;background:transparent}
 .roster{flex:0 0 266px;background:rgba(19,20,22,.62);backdrop-filter:blur(7px);
         display:flex;flex-direction:column;overflow:hidden}
-#left{border-right:1px solid var(--line)}
-#right{border-left:1px solid var(--line)}
 #stage{flex:0 0 auto;height:100%;position:relative;background:transparent}
 #wrap{height:100%;aspect-ratio:1/1;position:relative}
 #wrap canvas{width:100%;height:100%;display:block;background:#0c0c0d;
@@ -139,7 +137,8 @@ body{margin:0;color:var(--txt);overflow:hidden;
 /* 武器：第三行中间 */
 .pl .wp{flex:1 1 auto;display:flex;align-items:center;justify-content:center;
         width:66px;height:26px;min-width:0}
-.pl .wp i{width:66px;height:26px}
+/* 高度定死、宽度按图标比例（见 .wi.wpn），max-width 兜住最宽的 AWP(3.42)，避免溢出卡片 */
+.pl .wp i{height:20px;width:calc(20px*var(--wr,1));max-width:66px}
 /* 生命：第一行右侧大字 */
 .pl .hpv{font-size: 24px;font-weight:800;font-variant-numeric:tabular-nums;
          color:#fff;line-height:1;letter-spacing:-.02em;flex:0 0 auto}
@@ -152,12 +151,17 @@ body{margin:0;color:var(--txt);overflow:hidden;
 .wi{display:inline-block;vertical-align:-2px;background:currentColor;
     -webkit-mask-size:contain;-webkit-mask-repeat:no-repeat;-webkit-mask-position:center;
     mask-size:contain;mask-repeat:no-repeat;mask-position:center}
-.wi.wpn{width:16px;height:16px;opacity:.9;margin-right:3px}
+/* 武器图标：固定高度 + 宽度 = 高度×图标宽高比，元素宽高比与图标一致，mask 铺满也不变形，
+   这样 AWP(3.42) 与手枪(1.40) 高度看起来一致（原先 contain 在正方框里宽扁的枪被缩成一条细线） */
+.wi.wpn{height:16px;width:calc(16px*var(--wr,1));flex:0 0 auto;
+        -webkit-mask-size:100% 100%;mask-size:100% 100%;opacity:.9;margin-right:3px}
 .wi.armi{width:12px;height:12px;opacity:.85}
 .wi.c4i{width:14px;height:14px}
 .wi.defi{width:12px;height:12px;color:#7bd44b}
 .wi.asti{width:12px;height:12px;color:#7bd44b;margin:0 2px}
-.wi.kfi{width:13px;height:13px;color:#c9c9cc;margin-left:3px}
+.wi.kfi{width:15px;height:15px;color:#c9c9cc;margin-left:3px}
+/* 击杀日志里的武器图标按整行 13px 字放大一档；玩家卡上的仍用 16px，别把画布上的卡撑开 */
+#paneKf .kl .wi.wpn{height:20px;width:calc(20px*var(--wr,1))}
 .kft{font-size: 12px;padding:0 3px;border-radius:2px;line-height:12px;margin-left:3px;
      color:#c9c9cc;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.18)}
 
@@ -167,7 +171,8 @@ body{margin:0;color:var(--txt);overflow:hidden;
 
 /* ===== RWS / 击杀日志 独占一行 ===== */
 #logcol{flex:1 1 auto;min-width:310px;display:flex;flex-direction:column;min-height:0;
-        border-left:1px solid var(--line);background:rgba(16,17,18,.64);backdrop-filter:blur(7px)}
+        background:rgba(16,17,18,.64);backdrop-filter:blur(7px);
+        border-left:1px solid var(--line)}
 #logcol .pane{display:flex;flex-direction:column;min-height:0;overflow:hidden;background:transparent}
 #logcol .pane+.pane{border-top:1px solid var(--line)}
 /* 击杀日志一行约 32px、RWS 一行约 20px，同样条数需要的空间差一倍多，不能对半分 */
@@ -197,7 +202,7 @@ body{margin:0;color:var(--txt);overflow:hidden;
 .kl.boom{background:rgba(255,90,40,.10);border-left:2px solid #ff6a30;padding-left:7px}
 
 /* ===== 底部：回合条 + 时间轴 ===== */
-#bottom{background:rgba(18,19,21,.60);backdrop-filter:blur(7px);border-top:1px solid var(--line)}
+#bottom{background:rgba(18,19,21,.60);backdrop-filter:blur(7px)}
 #raWrap{display:flex;justify-content:center;padding:7px 0 3px}
 #roundaxis{position:relative;height:96px;display:grid;grid-template-rows:38px 20px 38px;user-select:none}
 #raTop,#raBot,#raLine{position:relative}
@@ -240,7 +245,7 @@ body{margin:0;color:var(--txt);overflow:hidden;
          cursor:pointer;transition:background .16s,border-color .16s,transform .12s;padding:0;line-height:1}
 .bigplay:hover{background:#262626;border-color:#5b8fd4;color:#fff}
 .bigplay:active{transform:scale(.95)}
-.cbtn2{padding:8px 15px;font-size: 13px;border-radius:6px}
+.cbtn2{padding:8px 15px;font-size: 13px;border:0;border-radius:0}
 /* 开关（轨迹） */
 .tgl{display:inline-flex;align-items:center;gap:7px;cursor:pointer;user-select:none}
 .tgl>input{display:none}
@@ -260,8 +265,6 @@ button:hover{border-color:var(--ct);color:var(--ct)}
 .tlrow{position:absolute;left:0;right:0;height:38px;pointer-events:none}
 #tlTop{top:0}
 #tlBot{bottom:0}
-.tlrow .lbl{position:absolute;left:0;top:2px;font-size: 12px;color:#8a8a8e;z-index:2;
-            background:rgba(0,0,0,.85);padding:0 4px;border-radius:2px}
 .tlt{position:absolute;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent}
 #tlTop .tlt{bottom:0;border-top:10px solid currentColor}
 #tlBot .tlt{top:0;border-bottom:10px solid currentColor}
@@ -289,21 +292,7 @@ a.back{color:#8a8a8e;font-size: 12px;text-decoration:none}
                  background:#0b0b0b;border:1px solid #2a2a2a;border-radius:6px;overflow:hidden;
                  box-shadow:0 22px 60px rgba(0,0,0,.85)}
 #tabbody{overflow-y:auto}
-.chartbar{display:flex;align-items:center;gap:6px;padding:8px 14px;background:#0d0d0d;
-          border-bottom:1px solid #242424;position:sticky;top:0;z-index:2;flex-wrap:wrap}
-.chartbar .clab{font-size: 12px;color:#8a8a8e;letter-spacing:.06em;margin-right:4px}
-.cbtn{background:#1a1b1c;color:#a8a8ab;border:1px solid #2c2d2f;border-radius:3px;
-      padding:2px 9px;font-size: 12px;cursor:pointer;font-family:inherit}
-.cbtn.on{background:#2f3033;color:#e6e7e9;border-color:#3a3b3e}
-.cbtn:hover{border-color:#454649}
-.cleg{margin-left:auto;font-size: 12px;color:#8a8a8d;display:flex;align-items:center;gap:5px}
-.cleg b{display:inline-block;width:8px;height:8px;border-radius:1px}
-.cleg .lm{background:#5b8fd4}
-.cleg .lo{background:#d8a83c}
-.cleg .lw{background:#7bd44b}
-.cleg .ll{background:#3c3c3f}
-.cleg .lc{background:#ffd166}
-.csel{background:#1a1b1c;color:#dfe0e2;border:1px solid #2c2d2f;border-radius:3px;
+.csel{background:#1a1b1c;color:#dfe0e2;border:0;border-radius:0;
       padding:2px 6px;font-size: 12px;font-family:inherit;max-width:140px}
 #chart{height:428px;padding:8px 14px 0;background:#0f1011;position:relative;
        overflow-x:auto;overflow-y:hidden}
@@ -311,13 +300,13 @@ a.back{color:#8a8a8e;font-size: 12px;text-decoration:none}
 .csvg .cnx{font-size: 12px;fill:#636366;text-anchor:middle;font-variant-numeric:tabular-nums}
 .csvg .cht{font-size: 12px;fill:#ffd166;text-anchor:middle;font-weight:700}
 .tabhead{display:flex;align-items:center;justify-content:space-between;padding:9px 14px;
-         background:#151618;border-bottom:1px solid #26272a;
+         background:transparent;border-bottom:0;
          position:sticky;top:0;z-index:3}
 .tabs{display:flex;gap:3px}
-.tt{background:transparent;color:#8a8a8e;border:1px solid transparent;border-radius:4px;
+.tt{background:transparent;color:#8a8a8e;border:0;border-radius:0;
     padding:5px 15px;font-size: 13px;cursor:pointer;font-family:inherit;font-weight:600}
-.tt:hover{color:#c9c9cc;background:#1f2023}
-.tt.on{background:#2b2c30;color:#fff;border-color:#3c3c3c}
+.tt:hover{color:#e8e8e9;background:#1f2023}
+.tt.on{background:#2b2c30;color:#fff}
 .thint{font-size: 12px;color:#6a6a6e}
 /* 道具表：总数据 / 本回合分组 */
 .utab thead tr.grp th{font-size: 12px;letter-spacing:.05em;color:#787878;
@@ -327,29 +316,30 @@ a.back{color:#8a8a8e;font-size: 12px;text-decoration:none}
 .utab th.sect,.utab td.sect{border-left:2px solid #3d3d3d;background:rgba(255,255,255,.028)}
 #chart svg{display:block;margin:0 auto}
 .chartbar{display:flex;align-items:center;gap:7px;padding:11px 14px;flex-wrap:wrap;
-          border-bottom:1px solid #222326}
+          border-bottom:1px solid #222326;position:sticky;top:0;z-index:2}
 .chartbar .clab{font-size: 12px;color:#8a8a8e;letter-spacing:.06em;margin-right:4px}
-.cbtn{background:#1c1d1f;color:#a8a8ab;border:1px solid #2d2e31;border-radius:4px;
-      padding:3px 11px;font-size: 12px;cursor:pointer;font-family:inherit}
-.cbtn.on{background:#2b2c30;color:#fff;border-color:#414141}
-.cbtn:hover{border-color:#4a4a4a}
+.cbtn{background:#1c1d1f;color:#a8a8ab;border:0;border-radius:0;
+      padding:5px 12px;font-size: 12px;cursor:pointer;font-family:inherit}
+.cbtn.on{background:#2b2c30;color:#fff}
+.cbtn:hover{background:#26272a;color:#e8e8e9}
 .cleg{margin-left:auto;font-size: 12px;color:#828286;display:flex;align-items:center;gap:5px}
-.cleg b{display:inline-block;width:9px;height:9px;border-radius:2px}
+.cleg b{display:inline-block;width:9px;height:9px;border-radius:0}
 .cleg .lm{background:#4a7fb5}
-.cleg .lc{background:#ffd166;height:3px}
+.cleg .lo{background:#d8a83c}
+.cleg .lc{background:rgba(232,232,233,.5);height:3px}
 .cleg .lw{background:#7bd44b}
 .chartbar .cleg b.ll{background:#353639}
 /* RWS 全员详情条 */
 .rwsdet{display:none;gap:6px;flex-wrap:wrap;align-items:center;
         padding:9px 14px;border-bottom:1px solid #222326;font-size: 12px;background:#101112}
 .rdLab{color:#8a8a8e;font-size: 12px;letter-spacing:.05em;margin-right:4px}
-.rdIt{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:4px;
-      background:#17181a;border:1px solid #26272a;color:#b9b9b9;font-size: 12px}
+.rdIt{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:0;
+      background:#17181a;border:0;color:#b9b9b9;font-size: 12px}
 .rdIt b{color:var(--c);font-weight:800;font-size: 12px}
 .rdIt i{color:#e0a458;font-style:normal;font-weight:700;
         font-variant-numeric:tabular-nums;margin-left:2px}
-.rdIt.me{border-color:#3d3d3d;background:#1e1f22}
-.csel{background:#1c1d1f;color:#dfe0e2;border:1px solid #2d2e31;border-radius:4px;
+.rdIt.me{background:#1e1f22}
+.csel{background:#1c1d1f;color:#dfe0e2;border:0;border-radius:0;
       padding:3px 8px;font-size: 12px;font-family:inherit;max-width:150px}
 /* 回合表现轴（面板底部常驻） */
 #perfAxis{position:sticky;bottom:0;background:#0d0e0f;border-top:1px solid #2a2b2e;
@@ -438,12 +428,7 @@ button{border-radius:var(--ui-r);background:var(--ui-bg3);border:1px solid var(-
        color:var(--ui-tx2);transition:background .14s,border-color .14s,color .14s}
 button:hover{background:#262626;border-color:var(--ui-bd2);color:var(--txt)}
 button:active{transform:translateY(1px)}
-.cbtn{border-radius:5px;padding:5px 12px;font-size: 12px}
-.cbtn.on{background:#2a2a2a;border-color:#4a4a4a;color:#e8e8e8}
-.cbtn:hover{background:#262626}
-.csel{border-radius:5px;background:var(--ui-bg2);border-color:var(--ui-bd);color:var(--txt)}
 #tabpanel{border:1px solid var(--ui-bd);border-radius:8px}
-#logcol{border-left-color:var(--ui-bd)}
 .pane .pt{border-bottom-color:var(--ui-bd)}
 .kl{border-bottom-color:#1a1c1f}
 #perfAxis{border-top-color:var(--ui-bd)}
@@ -489,7 +474,6 @@ button:focus-visible,.tt:focus-visible,.cbtn:focus-visible,.spdb:focus-visible,
 .csel:focus-visible,a.home:focus-visible,input[type=range]:focus-visible{
   outline:2px solid #6f6f6f;outline-offset:1px}
 button:disabled{opacity:.42;cursor:not-allowed;transform:none!important}
-.tt,.cbtn,.csel,.spdb{border-radius:5px}
 #tabpanel,#perfAxis{border-radius:8px}
 /* ================= 瑞士编辑式布局层（回放页） =================
    与主页同一套规则：去容器、细线 + 大留白分区、字号拉层级。
@@ -516,15 +500,12 @@ button:disabled{opacity:.42;cursor:not-allowed;transform:none!important}
         -webkit-backdrop-filter:none!important;backdrop-filter:none!important}
 #topbar::after{display:none!important}
 .tbox.l::before,.tbox.r::before{display:none!important}
-#mid{background:none!important;border-left:1px solid var(--rule)!important;
-     border-right:1px solid var(--rule)!important}
+#mid{background:none!important}
 .sc{font-size: 34px;font-weight:800;letter-spacing:-.03em}
 
-/* 两侧名单：去色块与模糊，用细线与地图分开 */
+/* 两侧名单：去色块与模糊，也不再画左右竖线，名字直接浮在地图上 */
 .roster{background:none!important;-webkit-backdrop-filter:none!important;
         backdrop-filter:none!important}
-#left{border-right:1px solid var(--rule)!important}
-#right{border-left:1px solid var(--rule)!important}
 .hdr{background:none!important;border-bottom:1px solid var(--rule)!important;
      padding:8px 19px 7px!important;
      font-size:var(--cap);letter-spacing:.10em;text-transform:uppercase;color:#8b8985}
@@ -537,7 +518,7 @@ button:disabled{opacity:.42;cursor:not-allowed;transform:none!important}
 .pl:hover{background:rgba(255,255,255,.035)!important}
 .pl .stripe{width:2px!important}
 
-/* 日志列：去色块，左侧一条线 */
+/* 日志列：去色块，只留它与地图之间那一根竖线（pane 之间另有横向分隔） */
 #logcol{background:none!important;-webkit-backdrop-filter:none!important;
         backdrop-filter:none!important;border-left:1px solid var(--rule)!important}
 .pane .pt{background:none!important;border-bottom:1px solid var(--rule)!important;
@@ -547,7 +528,7 @@ button:disabled{opacity:.42;cursor:not-allowed;transform:none!important}
 
 /* 底部条与控件 */
 #bottom{background:none!important;-webkit-backdrop-filter:none!important;
-        backdrop-filter:none!important;border-top:1px solid var(--rule)!important}
+        backdrop-filter:none!important;border-top:0!important}
 button{border-radius:2px!important}
 #tabpanel,#perfAxis{border-radius:2px!important}
 
@@ -579,8 +560,13 @@ button{border-radius:2px!important}
   color:var(--txt)!important}
 .cSep{background:var(--rule)!important}
 .chartbar .clab{color:var(--dim)!important}
-#tabpanel{background:rgba(var(--tint),.94)!important}
-#tabpanel .inner{background:rgb(var(--tint))!important;border-color:var(--rule)!important}
+#tabpanel{background:rgba(var(--tint),.30)!important;border:0!important}
+/* 半透明模糊底 + 无边框：像游戏内 HUD，压在遮罩上不切一块硬边出来。
+   两层有效不透明度 1-(1-.30)(1-.62)≈73%，背后的回放画面仍能透出来 */
+#tabpanel .inner{background:rgba(var(--tint),.62)!important;
+  -webkit-backdrop-filter:blur(16px) saturate(130%);
+  backdrop-filter:blur(16px) saturate(130%);
+  border:0!important}
 
 /* 阵营色是功能色：色相不能换，否则 CT/T 认不出来。
    但浅色底上要用低明度版，饱和度也收一点，不然在浅底上会跳。 */
@@ -645,31 +631,37 @@ html[data-theme="light"] #mid .c4.loose{color:#7a5a00!important;background:#fdf4
 .bd,.kft,.cleg,.ra-half span,.csvg .cnx,
 .utab thead tr.grp th,.csvg .cht{font-size:var(--t1)!important}
 /* 2) 10~11.5px 归一 */
-.hdr,.hdr .tag,.pane .pt,.rw .v2,.ra-tick,.tlrow .lbl,#tlticks .tx,
+.hdr,.hdr .tag,.pane .pt,.rw .v2,.ra-tick,#tlticks .tx,
 .chartbar .clab,.cbtn,.rdLab,.rdIt b,.paHint,.paTitle,.paNum,.th2,
 thead th,tr.tm td,#zoomTip,.legend{font-size:var(--t1)!important}
 /* 3) 表头 12 */
 .tb th,thead th{font-size:var(--t2)!important}
 /* 4) 圆角统一：全部 3px，不再 6/8/10 混着来 */
-.pl,.cbtn,.tt,.tag,.rwsdet,.hdr,.pane,.tabhead,.csel,
+.pl,.tag,.rwsdet,.hdr,.pane,.tabhead,
 .bigplay,.spdb,.tabs,.cleg,.chip{border-radius:var(--rr)!important}
-/* 5) 面板底色统一：同一层的块用同一个透明度，别再每块不一样 */
-.pane,.roster,.tabhead,.perfAxis,.rwsdet{
+/* 4b) 按钮类控件一律直角、无边：选中态靠底色/文字区分，不靠边框 */
+.cbtn,.cbtn2,.tt,.csel,.rdIt{border:0!important;border-radius:0!important}
+/* 面板底色统一：同一层的块用同一个透明度，别再每块不一样
+      .tabhead 不在此列 —— tab 头是透明的一行（无底色无边框），否则会看成挂在面板顶上的一个框 */
+.pane,.roster,.perfAxis,.rwsdet{
   background:rgba(255,255,255,.028)!important;
   border:1px solid rgba(255,255,255,.075)!important;
 }
-/* 6) 按钮统一：一样的底、一样的边 */
+/* 无容器化：名单列与日志面板不画竖线，只保留横向分隔（.pane+.pane 一条线） */
+#left,#right{border:0!important}
+#logcol .pane{border:0!important}
+#logcol .pane+.pane{border-top:1px solid var(--rule)!important}
+.tabhead{background:transparent!important;border:0!important}
+/* 6) 按钮统一：一样的底、一样的字色（边框与圆角见 4b，一律无边直角） */
 .cbtn,.tt,.csel,.spdb{
   background:rgba(255,255,255,.045)!important;
-  border:1px solid rgba(255,255,255,.09)!important;
   color:var(--dim)!important;
 }
 .cbtn.on,.tt.on,.spdb.on{
   background:rgba(255,255,255,.11)!important;
-  border-color:rgba(255,255,255,.20)!important;
   color:var(--txt)!important;
 }
-.cbtn:hover,.tt:hover,.spdb:hover{border-color:rgba(255,255,255,.22)!important;color:var(--txt)!important}
+.cbtn:hover,.tt:hover,.spdb:hover{color:var(--txt)!important}
 /* ===== 布局重构层 =====
    问题：① 玩家卡固定 80px，5 张只占上半，下方近一半是空的
         ② 击杀日志面板很大但空状态贴左上角
@@ -684,8 +676,6 @@ thead th,tr.tm td,#zoomTip,.legend{font-size:var(--t1)!important}
 #logcol{justify-content:flex-start;gap:0}
 #paneKf{flex:1 1 auto;display:flex;flex-direction:column;min-height:0}
 #paneKf .pc{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;overflow-y:auto}
-#paneKf .pc .kl{flex:1 1 auto;display:flex;align-items:center;justify-content:center;
-  text-align:center;color:var(--dim);font-size:var(--t2);padding:0}
 /* RWS 面板固定高度，不再和日志抢空间 */
 #paneRws{flex:0 0 auto;max-height:46%}
 #paneRws .pc{overflow-y:auto}
@@ -695,14 +685,13 @@ thead th,tr.tm td,#zoomTip,.legend{font-size:var(--t1)!important}
 /* ③ 数据面板：全屏居中弹窗 + 半透明遮罩（不要抽屉） */
 #tabpanel{position:fixed!important;inset:0!important;height:auto!important;
   display:none!important;align-items:center!important;justify-content:center!important;
-  background:rgba(0,0,0,.58)!important;
+  background:rgba(var(--tint),.30)!important;
   -webkit-backdrop-filter:blur(7px)!important;backdrop-filter:blur(7px)!important;
   z-index:50}
 #tabpanel.on{display:flex!important}
+/* 底与边框由上面的主题层统一给（半透明模糊、无边框），这里只管尺寸与阴影 */
 #tabpanel .inner{width:min(1180px,90vw)!important;max-height:88vh!important;
   border-radius:3px!important;
-  border:1px solid rgba(255,255,255,.13)!important;
-  background:rgba(10,10,11,.965)!important;
   box-shadow:0 24px 64px rgba(0,0,0,.72)!important}
 /* ④ 回合轴撑满宽度，刻度不再挤在中间 */
 #raWrap{justify-content:stretch!important;padding:8px 18px 4px!important}
@@ -759,7 +748,6 @@ thead th,tr.tm td,#zoomTip,.legend{font-size:var(--t1)!important}
 
 <div id="main">
   <div class="roster" id="left">
-    <div class="hdr"><span>我方</span><span class="tag" id="tagMine">CT</span></div>
     <div id="rosterMine"></div>
   </div>
   <div id="stage"><div id="wrap">
@@ -768,7 +756,6 @@ thead th,tr.tm td,#zoomTip,.legend{font-size:var(--t1)!important}
     <div id="zoomTip">滚轮缩放 · 拖拽平移 · 双击复位</div>
   </div></div>
   <div class="roster" id="right">
-    <div class="hdr"><span>敌方</span><span class="tag" id="tagOp">T</span></div>
     <div id="rosterOp"></div>
   </div>
   <div id="logcol">
@@ -811,9 +798,9 @@ thead th,tr.tm td,#zoomTip,.legend{font-size:var(--t1)!important}
       </div>
     </div>
     <div id="tlwrap">
-      <div class="tlrow" id="tlTop"><span class="lbl">我方</span></div>
+      <div class="tlrow" id="tlTop"></div>
       <div id="tlaxis"><div id="tlticks"></div><input type="range" id="time" min="0" max="100" value="0" step="0.02"></div>
-      <div class="tlrow" id="tlBot"><span class="lbl">敌方</span></div>
+      <div class="tlrow" id="tlBot"></div>
     </div>
     <div class="cRight">
       <span id="clock">0.0 / 0.0s</span>
@@ -859,11 +846,12 @@ const KF=[[1,'noscope','盲狙'],[2,'smoke_kill','混烟'],[4,'penetrate','穿�
 const WCN={world:'坠落',taser:'电击枪',hegrenade:'手雷',inferno:'燃烧',
            molotov:'燃烧瓶',incgrenade:'燃烧弹',smokegrenade:'烟雾弹',
            flashbang:'闪光弹',decoy:'诱饵',knife:'刀',knife_t:'刀',c4:'C4'};
-/* CS2 原生 SVG 图标（从 pak01 vpk 提取） */
-let ICONS=new Set();
+/* CS2 原生 SVG 图标（从 pak01 vpk 提取）；RATIOS = 各图标宽/高，用于让武器图标高度一致 */
+let ICONS=new Set(),RATIOS={};
 fetch('/icons/index.json').then(r=>r.json()).then(a=>{ICONS=new Set(a);if(R)draw();}).catch(()=>{});
+fetch('/icons/ratios.json').then(r=>r.json()).then(o=>{RATIOS=o||{};if(R)draw();}).catch(()=>{RATIOS={}});
 const wi=(n,cls='')=>ICONS.has(n)
-  ?`<i class="wi ${cls}" style="-webkit-mask-image:url(/icons/${n}.svg);mask-image:url(/icons/${n}.svg)"></i>`:'';
+  ?`<i class="wi ${cls}" style="--wr:${RATIOS[n]||1};-webkit-mask-image:url(/icons/${n}.svg);mask-image:url(/icons/${n}.svg)"></i>`:'';
 const WMAP={usp_silencer:'usp_silencer',m4a1_silencer:'m4a1_silencer',hkp2000:'hkp2000',
   glock:'glock',p250:'p250',deagle:'deagle',fiveseven:'fiveseven',elite:'elite',tec9:'tec9',
   ak47:'ak47',m4a1:'m4a1',galilar:'galilar',famas:'famas',aug:'aug',sg556:'sg556',
@@ -958,12 +946,6 @@ function updateTop(){
   const a=$('#sdMine'),b=$('#sdOp');
   a.textContent=mySide;b.textContent=opSide;a.className='sd '+CL(mySide);b.className='sd '+CL(opSide);
   $('#sMine').className='sc '+CL(mySide);$('#sOp').className='sc '+CL(opSide);
-  const tm=$('#tagMine'),to=$('#tagOp');
-  tm.textContent=mySide;to.textContent=opSide;tm.className='tag '+CL(mySide);to.className='tag '+CL(opSide);
-  const grad=(sd,rev)=>{const c=sd==='CT'?'91,143,212':'216,168,60';
-    return `linear-gradient(${rev?'270deg':'90deg'},rgba(${c},.28),rgba(${c},.03))`;};
-  $('#left .hdr').style.background=grad(mySide,false);
-  $('#right .hdr').style.background=grad(opSide,true);
   const remain=Math.max(0,r.dur-now);
   $('#clk').textContent=fmt(now<r.fz?r.fz-now:remain);
   $('#clk').style.color=now<r.fz?'#707073':(remain<10?'#ff4d4d':'#eaebec');
@@ -1570,7 +1552,7 @@ function buildPerfAxis(){
       sc.scrollLeft=Math.max(0,tgt-CELL*2);
   }
 }
-/* ---- 回合走势：单玩家 · 单回合值(柱) vs 累计值(线) ---- */
+/* ---- 回合走势：单玩家 · 单回合值(柱) + 全场场均(虚线) ---- */
 let chartMode='hs', chartPlayer=null;
 function playerSeries(name,m){
   const out=[]; let ck=0,chs=0,cd=0,cu=0,cf=0,crws=0,cw=0;
@@ -1597,10 +1579,28 @@ function playerSeries(name,m){
     }
     out.push([nowV,cumV,{k,hs}]);
   });
+  /* 累计总量随序列带出：全场场均线与悬停分解要用（cumV 语义不变） */
+  out.totals={ck,chs,cd,cu,cf,crws};
   return out;
 }
 const fmtV=(v,m)=>v===null||v===undefined?'—':(m==='hs'?v.toFixed(0)+'%':(m==='flash'?v.toFixed(1)+'s':v.toFixed(1)));
 const METRIC_NAME={hs:'爆头率',dmg:'每回合伤害',kill:'每回合击杀',flash:'被闪时长',rws:'RWS'};
+/* 图例按模式拼：每种模式只说自己图里真有的元素，句子不能共用 */
+function legendFor(m){
+  const win='<b class="lw"></b>胜 <b class="ll"></b>负';
+  if(m==='dmg'){
+    /* 两个色块：实色=枪械伤害，浅色=道具伤害（与堆叠柱的 .48 透明度对齐） */
+    return '<b class="lm"></b><b class="lm" style="opacity:.48"></b>柱=本回合你的伤害'
+      +'（实色 枪械 / 浅色 道具） · <b class="lc"></b>虚线=场均伤害 · '+win;
+  }
+  const L={hs:['柱=你本回合爆头率','线=累计爆头率'],
+           kill:['柱=你本回合击杀','虚线=场均击杀'],
+           util:['柱=你本回合道具数','虚线=场均道具数'],
+           flash:['柱=你本回合被闪时长','虚线=场均时长'],
+           rws:['柱=你本回合 RWS','虚线=场均 RWS']}[m];
+  if(!L) return '<b class="lm"></b>柱=你的单回合 · <b class="lc"></b>虚线=场均 · '+win;
+  return `<b class="lm"></b>${L[0]} · <b class="lc"></b>${L[1]} · `+win;
+}
 function buildChart(){
   const pane=$('#tabPane');
   if(!pane)return;
@@ -1614,7 +1614,7 @@ function buildChart(){
       <button class="cbtn${chartMode==='rws'?' on':''}" data-m="rws">RWS</button>
       <button class="cbtn${chartMode==='econ'?' on':''}" data-m="econ">经济</button>
       <button class="cbtn${chartMode==='flash'?' on':''}" data-m="flash">被闪</button>
-      <span class="cleg"><b class="lm"></b>柱=单回合 <b class="lc"></b>线=累计 <b class="lw"></b>胜 <b class="ll"></b>负</span>
+      <span class="cleg">${legendFor(chartMode)}</span>
     </div>
     <div id="rwsDetail" class="rwsdet"></div>
     <div id="chart"></div>`;
@@ -1642,13 +1642,21 @@ function buildChart(){
     }
   }
   const series=playerSeries(name,chartMode);
+  const T=series.totals;
   const scale=Math.max(1,...series.map(v=>Math.max(v[0]||0,v[1]||0)));
   /* 固定画布宽度：回合数变化时不再让整块图忽宽忽窄 */
   const n=R.length, PAD=54, H=380, W=1180;
   const CELL=(W-PAD)/n;
   const cw=CELL, bw=Math.max(2,CELL*0.58);
   const X=i=>PAD+(i+0.5)*cw;
-  const pts=series.map((v,i)=>`${X(i)},${H-(v[1]/scale)*H*0.9}`).join(' ');
+  /* 全场场均 = 全场总量 ÷ 回合数；爆头率是比率，直接用累计命中率 */
+  const meanV=chartMode==='hs'?(T.ck?T.chs/T.ck*100:0)
+    :chartMode==='dmg'?T.cd/n
+    :chartMode==='kill'?T.ck/n
+    :chartMode==='util'?T.cu/n
+    :chartMode==='flash'?T.cf/n
+    :T.crws/n;
+  const yMean=H-(Math.min(meanV,scale)/scale)*H*0.9;
   let g='';
   // y 轴网格（从 PAD 起，不压柱子）
   for(let s=0;s<=4;s++){
@@ -1656,20 +1664,29 @@ function buildChart(){
     g+=`<line x1="${PAD}" y1="${y}" x2="${W}" y2="${y}" stroke="#212226" stroke-width="1"/>`;
     g+=`<text x="${PAD-8}" y="${y+3.5}" fill="#5c5c60" font-size="10" text-anchor="end">${fmtV(scale*s/4,chartMode)}</text>`;
   }
+  /* 全场场均参考线：中性灰虚线，压在柱子下面，不抢阵营色 */
+  g+=`<line x1="${PAD}" y1="${yMean}" x2="${W}" y2="${yMean}" stroke="rgba(232,232,233,.35)"
+      stroke-width="1" stroke-dasharray="4 4"/>`;
   // 当前回合高亮
   g+=`<rect x="${PAD+cur*cw+1}" y="0" width="${cw-2}" height="${H}" fill="rgba(255,255,255,.055)"/>`;
+  let acc=0;   /* 累计总量：悬停第二行用；爆头率是比率，不累加 */
   series.forEach((v,i)=>{
     const r=R[i];
     const cx=X(i);
     const x=cx-bw/2;
+    if(chartMode!=='hs')acc+=(v[0]||0);
     /* 柱色跟当前回合我方阵营走：CT 蓝 / T 橙，换边自动变 */
     const myCol=SC(r.a_side);
+    let ud=0, gd=0;
     if(chartMode==='dmg'){
       const u=(r.util||{})[name]||{};
-      const ud=u.dmg||0, total=v[0]||0, gd=Math.max(0,total-ud);
+      ud=u.dmg||0; gd=Math.max(0,(v[0]||0)-ud);
       const hg=(gd/scale)*H*0.9, hu=(ud/scale)*H*0.9;
       g+=`<rect x="${x}" y="${H-hg}" width="${bw}" height="${Math.max(0.5,hg)}" fill="${myCol}" rx="0"/>`;
       if(ud>0)g+=`<rect x="${x}" y="${H-hg-hu}" width="${bw}" height="${Math.max(0.5,hu)}" fill="${myCol}" opacity=".48" rx="0"/>`;
+      /* 柱顶数值标在枪械+道具堆叠后的总高上方，不是单段高度 */
+      if(v[0])g+=`<text x="${cx}" y="${H-hg-hu-5}" fill="#9a9a9f" font-size="9"
+        text-anchor="middle">${Math.round(v[0])}</text>`;
     }else{
       const h=v[0]===null?0:(v[0]/scale)*H*0.9;
       g+=`<rect x="${x}" y="${H-h}" width="${bw}" height="${Math.max(0.5,h)}" fill="${myCol}" rx="0"/>`;
@@ -1682,22 +1699,42 @@ function buildChart(){
     g+=`<text x="${cx}" y="${H+18}" fill="${i===cur?'#e8e8e9':'#636366'}"
         font-size="10" text-anchor="middle"
         font-weight="${i===cur?'700':'400'}">${r.r}</text>`;
-    g+=`<rect class="chit" x="${PAD+i*cw}" y="0" width="${cw}" height="${H}" fill="transparent"
-        data-i="${i}"><title>R${r.r}｜本回合 ${fmtV(v[0],chartMode)}　累计 ${fmtV(v[1],chartMode)}</title></rect>`;
-  });
-  /* 累计线：中性灰，避免和阵营色抢 */
-  g+=`<polyline points="${pts}" fill="none" stroke="rgba(232,232,233,.55)" stroke-width="1.8"
-      stroke-linejoin="round" stroke-linecap="round"/>`;
-  /* 折线节点 + 当前回合数值 */
-  series.forEach((v,i)=>{
-    const cx=X(i), cy=H-(v[1]/scale)*H*0.9;
-    g+=`<circle cx="${cx}" cy="${cy}" r="${i===cur?3.4:2}"
-        fill="${i===cur?'#e8e8e9':'rgba(232,232,233,.6)'}" stroke="none"/>`;
-    if(i===cur){
-      g+=`<text x="${cx}" y="${cy-8}" fill="#e8e8e9" font-size="10.5"
-        text-anchor="middle" font-weight="700">${fmtV(v[1],chartMode)}</text>`;
+    /* 悬停两行：本回合构成 / 累计量 */
+    let tip;
+    if(chartMode==='dmg'){
+      tip=`R${r.r}｜你本回合伤害 ${Math.round(v[0]||0)}（枪械 ${Math.round(gd)} / 道具 ${Math.round(ud)}）&#10;`
+        +`累计总伤 ${Math.round(acc)}`;
+    }else{
+      const cum=chartMode==='hs'?`累计爆头率 ${fmtV(v[1],'hs')}`
+        :chartMode==='kill'?`累计总击杀 ${Math.round(acc)}`
+        :chartMode==='util'?`累计总道具数 ${Math.round(acc)}`
+        :chartMode==='flash'?`累计被闪时长 ${acc.toFixed(1)}s`
+        :`累计总分 ${acc.toFixed(1)}`;
+      tip=`R${r.r}｜你本回合 ${fmtV(v[0],chartMode)}&#10;${cum}`;
     }
+    g+=`<rect class="chit" x="${PAD+i*cw}" y="0" width="${cw}" height="${H}" fill="transparent"
+        data-i="${i}"><title>${tip}</title></rect>`;
   });
+  /* 累计折线只给爆头率：比率与单回合同量纲，不会把画布顶高。
+     伤害/RWS/道具这类累计总量量级会翻十几倍，只保留场均虚线。 */
+  if(chartMode==='hs'){
+    const cyOf=v=>H-(Math.min(v[1]||0,scale)/scale)*H*0.9;
+    const pts=series.map((v,i)=>`${X(i)},${cyOf(v)}`).join(' ');
+    g+=`<polyline points="${pts}" fill="none" stroke="rgba(232,232,233,.55)" stroke-width="1.8"
+        stroke-linejoin="round" stroke-linecap="round"/>`;
+    series.forEach((v,i)=>{
+      const cx=X(i), cy=cyOf(v);
+      g+=`<circle cx="${cx}" cy="${cy}" r="${i===cur?3.4:2}"
+          fill="${i===cur?'#e8e8e9':'rgba(232,232,233,.6)'}" stroke="none"/>`;
+      if(i===cur){
+        g+=`<text x="${cx}" y="${cy-8}" fill="#e8e8e9" font-size="10.5"
+          text-anchor="middle" font-weight="700">${fmtV(v[1],'hs')}</text>`;
+      }
+    });
+  }
+  /* 场均数值：标在虚线右端，往上抬一点避开线本身 */
+  g+=`<text x="${W}" y="${yMean-5}" fill="#7a7a7f" font-size="10" text-anchor="end"
+      font-variant-numeric="tabular-nums">场均 ${fmtV(meanV,chartMode)}</text>`;
   box.innerHTML=`<svg width="${W}" height="${H+24}" viewBox="0 0 ${W} ${H+24}">${g}</svg>`;
   box.querySelectorAll('.chit').forEach(el=>{
     el.style.cursor='pointer';

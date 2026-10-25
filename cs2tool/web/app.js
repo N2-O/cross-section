@@ -848,7 +848,7 @@ function rEcon() {
         const wr = r.wr;
         return wr == null ? '—' : `<span class="${wr >= 50 ? 'w' : 'l'}">${wr}%</span>`;
       } },
-    { t: '人均装备', num: 1, get: r => r.eq ? '$' + nth(r.eq) : '—' },
+    { t: '本人装备', num: 1, get: r => r.eq ? '$' + nth(r.eq) : '—' },
   ], buy) : '<div class="nil">暂无购买类型数据</div>';
 
   /* 逐场花费：只显示最近 20 场，避免场次多了拉成一长条；

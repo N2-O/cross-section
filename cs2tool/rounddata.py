@@ -165,13 +165,46 @@ def build(conn, match_id: int, demo_path: str, overviews_dir: str, step: int = 1
     except Exception:
         pass
 
+    # 每回合每个受害者的死亡 tick（一个回合内同一人只会死一次）
+    death_tick = {}
+    for k in conn.execute("SELECT round, victim_steamid v, tick FROM kills WHERE match_id=?", (match_id,)):
+        if k["v"]:
+            death_tick[(int(k["round"]), toid(k["v"]))] = int(k["tick"])
+
+    # 伤害口径：只算 dmg_health（不含甲伤，与游戏内 HUD 一致），
+    # 截断到受害者本回合剩余血量（初始 100），并排除死后补枪（tick 严格大于死亡 tick）。
     dmg_by_round = {}
-    for dd in conn.execute("SELECT round, attacker_steamid a, dmg_health d FROM damage WHERE match_id=?", (match_id,)):
-        if dd["a"] and dd["a"] > 0:
-            nm = players_db.get(dd["a"], {}).get("name")
-            if nm:
-                dmg_by_round.setdefault(dd["round"], {})
-                dmg_by_round[dd["round"]][nm] = dmg_by_round[dd["round"]].get(nm, 0) + (dd["d"] or 0)
+    dmg_raw_by_round = {}  # 旧口径，仅供日志对照，不写入回放数据
+    hp_left = {}           # (round, victim_steamid) -> 剩余血量
+    for dd in conn.execute("SELECT round, tick, attacker_steamid a, victim_steamid v, dmg_health d "
+                           "FROM damage WHERE match_id=? ORDER BY round, tick", (match_id,)):
+        rnd = int(dd["round"])
+        a, v = dd["a"], dd["v"]
+        d = dd["d"] or 0
+        nm = players_db.get(a, {}).get("name") if (a and a > 0) else None
+        if nm:
+            dmg_raw_by_round.setdefault(rnd, {})
+            dmg_raw_by_round[rnd][nm] = dmg_raw_by_round[rnd].get(nm, 0) + d
+        if not nm or not v or d <= 0:
+            continue
+        vid = toid(v)
+        dt = death_tick.get((rnd, vid))
+        if dt is not None and int(dd["tick"]) > dt:
+            continue        # 死后补枪，不计伤害
+        key = (rnd, vid)
+        left = hp_left.get(key, 100)
+        if left <= 0:
+            continue
+        eff = d if d < left else left
+        hp_left[key] = left - eff
+        dmg_by_round.setdefault(rnd, {})
+        dmg_by_round[rnd][nm] = dmg_by_round[rnd].get(nm, 0) + eff
+
+    _raw_total = sum(sum(x.values()) for x in dmg_raw_by_round.values())
+    _eff_total = sum(sum(x.values()) for x in dmg_by_round.values())
+    if _raw_total:
+        print(f"  伤害口径：原始 {_raw_total} → 有效 {_eff_total}"
+              f"（差 {(_eff_total - _raw_total) / _raw_total * 100:+.1f}%）")
 
     kills_db = {}
     for k in conn.execute("SELECT round, tick, attacker_steamid a, victim_steamid v, assister_steamid s, "

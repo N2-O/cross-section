@@ -224,7 +224,7 @@ function renderGames() {
                      `<button class="mini del" data-del="${nm}" title="删除这场：原始文件 + 分析数据 + 回放缓存，全部移除">✕</button>`;
         if (r.error) return `<span class="op"><span class="l" title="${esc(r.error)}">失败</span>${tail}</span>`;
         if (!r.analyzed) return `<span class="op"><button data-analyze="${nm}">分析</button>${tail}</span>`;
-        return `<span class="op"><a href="/replay.html?m=${r.match_id}" title="看这场回放">回放 →</a>${tail}</span>`;
+        return `<span class="op"><a href="/replay.html?m=${r.match_id}" target="_blank" rel="noopener" title="看这场回放">回放 →</a>${tail}</span>`;
     } },
   ], rows);
 

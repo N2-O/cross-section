@@ -18,6 +18,9 @@ __pycache__/
 *.zip
 update.zip
 
+# 本机自用：局域网 API 启动器（不进发布包，避免默认对外监听）
+API.bat
+
 # 历史遗留（update.py 时代的增量更新，已停用）
 _archive/
 

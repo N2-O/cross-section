@@ -26,11 +26,11 @@ body{margin:0;color:var(--txt);font:13px/1.55 system-ui,-apple-system,"Segoe UI"
        rgb(var(--tint));
      background-attachment:fixed}
 a{color:var(--acc);text-decoration:none}
-button{background:#1e1e1f;color:var(--txt);border:1px solid var(--line);border-radius:6px;
+button{background:#1e1e1f;color:var(--txt);border:0;border-radius:0;
        padding:6px 12px;cursor:pointer;font-size: 13px;font-family:inherit}
-button:hover:not(:disabled){border-color:var(--acc);color:var(--acc)}
+button:hover:not(:disabled){background:#2a2a2b;color:var(--acc)}
 button:disabled{opacity:.45;cursor:default}
-button.pri{background:#1d4f7a;border-color:#2b6ea8;color:#dbeafe}
+button.pri{background:#1d4f7a;color:#dbeafe}
 button.pri:hover{background:#225f92;color:#fff}
 input,select{background:var(--panel2);color:var(--txt);border:1px solid var(--line);
              border-radius:6px;padding:6px 9px;font:inherit;font-size: 13px}
@@ -151,7 +151,7 @@ table.dt{table-layout:fixed;min-width:1180px;font-size: 13px}
 #chart svg{display:block;width:100%}
 .tabs{display:flex;gap:6px}
 .tabs button{padding:4px 10px;font-size: 12px}
-.tabs button.on{background:#2a2a2b;border-color:#484849;color:#e8e8e9}
+.tabs button.on{background:#2a2a2b;color:#e8e8e9}
 .muted{color:var(--dim)}
 /* ===== 设置弹层 ===== */
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.74);backdrop-filter:blur(6px);
@@ -355,11 +355,11 @@ input[type=color]{width:46px;height:30px;padding:0;border:1px solid var(--line);
 #top{background:linear-gradient(var(--ov1),var(--ov1)),rgba(var(--tint),.92)!important;
      -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
 button{background:linear-gradient(var(--ov1),var(--ov1)),rgb(var(--tint))!important;
-       border-color:var(--rule)!important}
+       border:0!important}
 button:hover:not(:disabled){background:linear-gradient(var(--ov2),var(--ov2)),rgb(var(--tint))!important;
-       border-color:var(--acc)!important}
+       color:var(--acc)!important}
 button.pri{background:linear-gradient(var(--ov2),var(--ov2)),rgb(var(--tint))!important;
-           border-color:var(--acc)!important;color:var(--txt)!important;font-weight:650}
+           color:var(--txt)!important;font-weight:650}
 .dt th{background:rgba(var(--tint),.55)!important}
 .dt tbody tr:hover td{background:linear-gradient(var(--ov1),var(--ov1)),rgb(var(--tint))!important}
 .dwrap{background:rgba(var(--tint),.60)!important}
@@ -369,7 +369,7 @@ button.pri{background:linear-gradient(var(--ov2),var(--ov2)),rgb(var(--tint))!im
 .bar.neg .tr i{background:var(--bad)!important}
 .tabs button.on,.wmenu button.on{
   background:linear-gradient(var(--ov2),var(--ov2)),rgb(var(--tint))!important;
-  border-color:var(--acc)!important;color:var(--txt)!important}
+  color:var(--txt)!important}
 .wmenu button:hover,.mbox .x:hover{background:var(--ov1)!important}
 .wdetail{background-color:var(--panel-ov)!important}
 .modal{background:rgba(var(--tint),.62)!important}
@@ -387,8 +387,8 @@ html[data-theme="light"] .sc-l{color:#b02a2a!important}
    —— 规范里"确有功能需求时才用背景容器"就指这种 */
 .dwrap{background:rgba(8,8,9,.40);padding:4px 0}
 
-/* 控件：方一点 */
-button{border-radius:2px!important}
+/* 控件：直角、无边 */
+button{border-radius:0!important}
 input,select{border-radius:2px!important}
 
 /* 武器面板：拆掉色块底，用左准线定位 */

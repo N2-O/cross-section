@@ -71,15 +71,18 @@ TABLES_DOC = {
     "kills": "每次击杀（击杀者/死亡者/助攻者/武器/爆头/各类标记）",
     "damage": "每次伤害事件（含武器、命中部位、伤害值）",
     "rounds": "每回合结果（胜方、结束原因、a_side 我方阵营、a_win 我方是否赢）",
-    "economy": "每回合每阵营经济。注意 pre_bal 实际存的是回合初装备价值、post_bal 是冻结时现金，"
-                "两者量纲不同，相减不是花费；要算花费请用 pms.spent 或 spend_cat",
+    "economy": "每回合每阵营经济（5 人合计）。pre_bal=回合开始现金合计、post_bal=冻结结束现金合计、"
+                "end_bal=回合判定前 1 秒现金合计，三者同量纲、可直接相减；"
+                "start_eq=回合初装备合计、end_eq=买完后装备合计（装备价值，与现金不是一回事）",
     "pms": "每场每人的统计（ADR/KAST/Rating/首杀/多杀/残局/急停率等）。"
            "stop_shots=开火瞬间速度≤34 units/s 的次数，imprecise_shots 是它的补数；"
            "gun_fire_count=枪械开火数（分母只算枪，不含投掷与挥刀）；"
            "t_fk/t_fd=作为 T 方时的首杀/首死，ct_fk/ct_fd 为 CT 方，"
            "四者之和应等于 fk/fd",
     "snapshots": "每场每人的能力快照（用于趋势与退步预警）",
-    "purchases": "购买/掉落/捡起事件（item、cost、action、side）。不含护甲和拆弹钳",
+    "purchases": "购买/退款/掉落/捡起事件（item、cost、action、side）。"
+                 "含退款类事件（action=sell/refund/item_sell/return），"
+                 "算花费请用 round_end.spend（钱包法，含护甲与拆弹钳）",
     "blinds": "每次致盲事件（致盲者/受害者/时长）",
     "round_end": "回合结束时每人是否存活与装备价值（end_tick-64 采样）",
     "weapon_stat": "每场每人每武器的开火/命中/击杀/未急停计数（未急停=开火瞬间速度>34 units/s）",
@@ -594,20 +597,24 @@ def api_player_economy(conn, sid, qs):
         out["rounds"] = stats_api.econ_rounds(conn, sid,
                                               _window_ids(conn, sid, qs))
         out["field_map"] = {
-            "player_spend": "个人本回合实际支出",
-            "player_buy_type": "个人购买档：eco<1000 / force<3200 / half<4500 / full≥4500",
+            "player_spend": "个人本回合支出（钱包法：回合开始现金 − 冻结结束现金，"
+                            "含护甲与拆弹钳，已扣退款）",
+            "player_buy_type": "个人购买档（按个人买完后装备价值 equip_fz）："
+                               "≥4500 全买 / 3000-4500 半买 / 1500-3000 强起 / <1500 ECO；"
+                               "第 1、13 回合为手枪局",
             "player_equipment_value_round_start":
                 "回合开始继承的装备（团队 start_eq ÷ 5，人均）",
             "player_equipment_value_end":
                 "回合结束时（结算前 -64 tick）身上的装备，阵亡为 0。"
                 "不是 freeze time 末的快照",
-            "team_buy_type": "队伍层面的购买档（economy 表同阵营那一行）",
-            "team_spend": "该阵营本回合总支出（5 人合计）",
+            "team_buy_type": "队伍层面的购买档（economy 表同阵营那一行，团队口径）",
+            "team_spend": "该阵营本回合总支出（5 人合计个人钱包法花费之和）",
             "saved": "败局存活且仍有装备（保物资，不限枪）",
         }
         out["note"] = {
-            "spent_avg": "团队每回合花费（5 人合计），人均 = 除以 5",
-            "inv_rate": "装备保留率 = 回合初继承装备 ÷ 回合末装备",
+            "spent_avg": "团队每回合花费（5 人钱包法花费合计），人均 = 除以 5；"
+                         "个人值见 player_spend",
+            "inv_rate": "装备保留率 = 回合初继承装备 ÷ 回合末装备（都是人均值，取比值，与花费无关）",
             "save_economy": "败局存活且仍有装备的回合数（保物资，不限枪）",
         }
         return _ok(out)

@@ -199,6 +199,16 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
         _ticks: set[int] = set()
         for _r in rounds.iter_rows(named=True):
             _fz, _et = _r["freeze_end_tick"], _r["end_tick"]
+            # 回合开始 tick：钱包法算花费要用「回合开始现金」
+            _st = _r["start_tick"]
+            if _st is not None:
+                _ticks.add(int(_st))
+                # buytime 结束 = 回合开始 + 20 秒（mp_buytime 默认 20s，从回合开始算）。
+                # freeze time 常见只有 15 秒，freeze_end 之后还能买枪，钱包法要拿这个
+                # 时刻的钱包当终点，否则 freeze 后买的枪（如 R8 的 Nova）整把漏算。
+                _bt = int(_st) + 20 * 64
+                if _et is None or _bt <= int(_et):
+                    _ticks.add(_bt)
             if _fz is not None:
                 _ticks.add(int(_fz))
             if _et is not None:
@@ -221,6 +231,23 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
         log(f"  快照采样 {len(_ticks)} 个时刻 / {len(_blob) if _ticks else 0} 行")
     except Exception as _e:
         log(f"  [warn] 快照批量采样失败: {type(_e).__name__}: {_e}")
+
+    # 钱包法的「购买结束」时刻：buytime 结束（回合开始 + 20 秒），不是 freeze_end。
+    # CS2 的 mp_buytime 默认 20 秒且从回合开始算，freeze time 实测常见只有 15 秒，
+    # 中间那 5 秒照样能买枪 —— 用 freeze_end 当终点会把这段买的东西整把漏算
+    # （实测某局 R8 真花 2050，freeze_end 口径只算出 1000）。该 tick 没采到、或回合
+    # 在 buytime 结束前就打完了，退回 freeze_end_tick。
+    wallet_end: dict[int, int] = {}
+    for _r in rounds.iter_rows(named=True):
+        if _r["start_tick"] is None:
+            continue
+        _rn = int(_r["round_num"])
+        _fz_r, _et_r = _r["freeze_end_tick"], _r["end_tick"]
+        _bt_r = int(_r["start_tick"]) + 20 * 64
+        if _bt_r in _snap_at and (_et_r is None or _bt_r <= int(_et_r)):
+            wallet_end[_rn] = _bt_r
+        elif _fz_r is not None:
+            wallet_end[_rn] = int(_fz_r)
 
     if len(rounds) == 0:
         raise RuntimeError("没有可识别的回合")
@@ -438,17 +465,43 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
     except Exception as e:
         log(f"  [warn] 射击统计失败: {type(e).__name__}: {e}")
 
-    # 个人购买支出（item_events.purchase 的 cost，按 tick 归回合）
+    # 个人花费：钱包法。spent = 回合开始现金 − buytime 结束现金（t_start + 20s）。
+    # 退款、护甲、买枪送人都在钱包曲线上自然体现，不用逐个事件加减。
+    # 注意终点不能取 freeze_end：freeze 之后还有几秒可以买枪（见 wallet_end）。
+    # 主口径已改为引擎 m_iCashSpentThisRound，这里只做兜底与对账。
     spent_map: dict[tuple, int] = {}
+    start_money: dict[tuple, int] = {}     # (sid, round) -> 回合开始现金
     try:
-        for it in dem.item_events.iter_rows(named=True):
-            if it["action"] != "purchase" or not it["steamid"]:
+        for _r in rounds.iter_rows(named=True):
+            rn = int(_r["round_num"])
+            _st, _fz = _r["start_tick"], _r["freeze_end_tick"]
+            _we = wallet_end.get(rn)          # 终点点位：buytime 结束（退回 freeze_end）
+            if _we is None:
                 continue
-            sid = int(it["steamid"])
-            rn = tick_round(it["tick"]) or 0
-            spent_map[(sid, rn)] = spent_map.get((sid, rn), 0) + _i(it["cost"])
+            _fz_i = int(_fz) if _fz is not None else _we
+            # 起点优先用 start_tick 快照；缺了退到回合内最早的一帧
+            _cands: list[int] = []
+            if _st is not None:
+                _cands.append(int(_st))
+            _cands += [t for t in sorted(_snap_at)
+                       if (_st is None or t >= int(_st)) and t <= _fz_i
+                       and t not in _cands]
+            for _t in _cands:
+                for s in _snap_at.get(_t, []):
+                    sid = int(s["steamid"]) if s["steamid"] else None
+                    if not sid or s["money"] is None:
+                        continue
+                    start_money.setdefault((sid, rn), _i(s["money"]))
+            for s in _snap_at.get(_we, []):
+                sid = int(s["steamid"]) if s["steamid"] else None
+                if not sid or s["money"] is None:
+                    continue
+                a = start_money.get((sid, rn))
+                if a is None:
+                    continue            # 起点缺失：跳过，下游显示为空而不是 0
+                spent_map[(sid, rn)] = max(0, a - _i(s["money"]))
     except Exception as e:
-        log(f"  [warn] 购买统计失败: {type(e).__name__}: {e}")
+        log(f"  [warn] 花费统计失败: {type(e).__name__}: {e}")
 
     # 目标：安包 / 拆包
     plant_map: dict[int, int] = {}
@@ -465,12 +518,18 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
     except Exception as e:
         log(f"  [warn] 目标事件失败: {type(e).__name__}: {e}")
 
-    # 装备价值（冻结结束时）+ 回合末存活/装备
+    # 装备价值（buytime 结束时）+ 回合末存活/装备
     equip_fz: dict[tuple, int] = {}
     equip_start: dict[tuple, int] = {}
     money_fz: dict[tuple, int] = {}
-    equip_end: dict[int, int] = {}
+    cash_start: dict[tuple, int] = {}       # 回合开始现金（start_tick 快照）
+    money_end: dict[tuple, int] = {}        # 回合判定前 1 秒的现金
+    equip_end: dict[tuple, int] = {}        # 回合判定前 1 秒的装备价值
+    alive_end: dict[tuple, int] = {}        # 回合判定前 1 秒是否存活
     try:
+        # 回合初继承装备：equipment_value_round_start 字段本身记录的就是回合初值，
+        # 采样点保持 freeze_end 快照即可。同一帧顺手记下 freeze_end 时的装备价值，
+        # 作为 equip_fz 的兜底（buytime 结束帧缺失时回退）。
         for _t in [int(r["freeze_end_tick"]) for r in rounds.iter_rows(named=True)
                    if r["freeze_end_tick"] is not None]:
             for s in _snap_at.get(_t, []):
@@ -478,18 +537,44 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
                 if not sid:
                     continue
                 rn = tick_round(s["tick"]) or 0
-                equip_fz[(sid, rn)] = _i(s["equipment_value"])
                 equip_start[(sid, rn)] = _i(s["equipment_value_round_start"])
-                money_fz[(sid, rn)] = _i(s["money"])
-        for _t in [int(r["end_tick"]) for r in rounds.iter_rows(named=True)
-                   if r["end_tick"] is not None]:
+                if s["equipment_value"] is not None:
+                    equip_fz.setdefault((sid, rn), _i(s["equipment_value"]))
+        # 买完后的装备 + 终点现金：都取 buytime 结束那一刻（不是 freeze_end，见 wallet_end 注释）。
+        # equip_fz 必须用这个点位，否则那 5 秒里买的枪会整把漏算（实测 R8 买到 2250
+        # 却被记成 1200，购买分档误判成 ECO）。上面的 freeze_end 值只在缺帧时保留。
+        for _rn, _we in wallet_end.items():
+            for s in _snap_at.get(_we, []):
+                sid = int(s["steamid"]) if s["steamid"] else None
+                if not sid:
+                    continue
+                if s["equipment_value"] is not None:
+                    equip_fz[(sid, _rn)] = _i(s["equipment_value"])
+                if s["money"] is None:
+                    continue
+                money_fz[(sid, _rn)] = _i(s["money"])
+        # 回合开始现金：口径与钱包法的起点一致（start_tick 快照的 money）
+        for _r in rounds.iter_rows(named=True):
+            if _r["start_tick"] is None:
+                continue
+            rn = int(_r["round_num"])
+            for s in _snap_at.get(int(_r["start_tick"]), []):
+                sid = int(s["steamid"]) if s["steamid"] else None
+                if not sid or s["money"] is None:
+                    continue
+                cash_start[(sid, rn)] = _i(s["money"])
+        # end_tick 时玩家状态已重置（health 全 0），采样点改到回合判定前 1 秒
+        for _t in [int(r["end_tick"]) - 64 for r in rounds.iter_rows(named=True)
+                   if r["end_tick"] is not None and int(r["end_tick"]) > 128]:
             for s in _snap_at.get(_t, []):
                 sid = int(s["steamid"]) if s["steamid"] else None
                 if not sid:
                     continue
-                # end_tick 时玩家状态已重置，health 不可信；这里只取装备价值
-                if _i(s["health"]) > 0:
-                    equip_end[sid] = equip_end.get(sid, 0) + _i(s["equipment_value"])
+                rn = tick_round(s["tick"]) or 0
+                _hp = _i(s["health"])
+                equip_end[(sid, rn)] = _i(s["equipment_value"]) if _hp > 0 else 0
+                alive_end[(sid, rn)] = 1 if _hp > 0 else 0
+                money_end[(sid, rn)] = _i(s["money"])
     except Exception as e:
         log(f"  [warn] 装备采样失败: {type(e).__name__}: {e}")
 
@@ -736,6 +821,51 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
             for (sid, w), v in wstat.items()
         ])
 
+    # ---------- 引擎花费（m_iCashSpentThisRound）：round_end.spend 的主口径
+    # 回合末的 m_iCashSpentThisRound 就是该回合真实总花费：天然含护甲、拆弹钳，
+    # 且已扣退款，不依赖任何「哪个 tick 算购买结束」的推断。钱包法（cash_start −
+    # buy_end 现金）虽然已经把终点挪到 buytime 结束，仍是间接推算（mp_buytime 被
+    # 服主改过、或买完又退款都会偏），所以只做兜底。
+    engine_spent: dict[tuple, int] = {}
+    try:
+        from demoparser2 import DemoParser as _DP_SP
+        _sp_ends: dict[int, int] = {}
+        for _r in rounds.iter_rows(named=True):
+            if _r["end_tick"] is None:
+                continue
+            _sp_ends[int(_r["round_num"])] = int(_r["end_tick"])
+        if _sp_ends:
+            _sp_t2r = {t: rn for rn, t in _sp_ends.items()}
+            _F_SPEND = ("CCSPlayerController.CCSPlayerController_InGameMoneyServices"
+                        ".m_iCashSpentThisRound")
+            _sptk = _DP_SP(demo_path).parse_ticks(
+                [_F_SPEND], ticks=sorted(set(_sp_ends.values())))
+            _sptk = _sptk.rename(columns={_F_SPEND: "spent"})
+            for row in _sptk.itertuples(index=False):
+                rn = _sp_t2r.get(_i(getattr(row, "tick"), -1))
+                sid = _i(getattr(row, "steamid", None), 0)
+                _raw = getattr(row, "spent", None)
+                # 缺值(None/NaN)跳过，交给钱包法兜底；0 是有效值（手枪局没买），要留住
+                if rn is None or not sid or _raw is None or _raw != _raw:
+                    continue
+                # 键序 (round, sid)，与花费构成块的 last_spent 一致
+                engine_spent[(rn, sid)] = int(_raw)
+    except Exception as e:
+        engine_spent = {}
+        log(f"  [warn] 引擎花费读取失败（spent 回退钱包法）: {type(e).__name__}: {e}")
+    if engine_spent:
+        log(f"  引擎花费 {len(engine_spent)} 人次（spent 主口径）")
+
+    def _spend_val(sid: int, rn: int):
+        """spent 三级取值：引擎值 → 钱包法 → None。"""
+        eng = engine_spent.get((rn, sid))
+        if eng is not None:
+            return eng
+        c0, c1 = cash_start.get((sid, rn)), money_fz.get((sid, rn))
+        if c0 is not None and c1 is not None:
+            return max(0, c0 - c1)
+        return None
+
     # 回合判定前 1 秒采样：存活状态与携带装备（用于保枪统计）
     # end_tick 那一刻玩家状态已被重置，health 全是 0，不能用来判活。
     rte_rows = []
@@ -757,6 +887,11 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
                     match_id=mid, round=rn, steamid=sid,
                     alive=1 if _i(s["health"]) > 0 else 0,
                     equip=_i(s["equipment_value"]),
+                    equip_start=equip_start.get((sid, rn)),
+                    equip_fz=equip_fz.get((sid, rn)),
+                    cash_start=cash_start.get((sid, rn)),
+                    cash_fz=money_fz.get((sid, rn)),   # buytime 结束（t_start+20s）时的现金
+                    spend=_spend_val(sid, rn),
                 ))
     except Exception as e:
         log(f"  [warn] 回合末采样失败: {type(e).__name__}: {e}")
@@ -774,7 +909,12 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
                 for sid in roster:
                     if (sid, rn) not in have:
                         rte_rows.append(dict(match_id=mid, round=rn, steamid=sid,
-                                             alive=0, equip=0))
+                                             alive=0, equip=0,
+                                             equip_start=equip_start.get((sid, rn)),
+                                             equip_fz=equip_fz.get((sid, rn)),
+                                             cash_start=cash_start.get((sid, rn)),
+                                             cash_fz=money_fz.get((sid, rn)),
+                                             spend=_spend_val(sid, rn)))
         except Exception as e:
             log(f"  [warn] 回合末补齐失败: {type(e).__name__}: {e}")
     if rte_rows:
@@ -815,14 +955,26 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
         fs = pside.get(sid2) or "T"
         sd = side_of(fs, rn)
         start_eq_team[(sd, rn)] = start_eq_team.get((sd, rn), 0) + v
+    # 回合开始现金合计：pre_bal 的真实口径（钱包法的起点）
+    cash_start_team: dict[tuple, int] = {}
+    for (sid2, rn), v in cash_start.items():
+        fs = pside.get(sid2) or "T"
+        sd = side_of(fs, rn)
+        cash_start_team[(sd, rn)] = cash_start_team.get((sd, rn), 0) + v
+    # 回合判定前 1 秒的现金合计：end_bal 的真实口径
+    team_money_end: dict[tuple, int] = {}
+    for (sid2, rn), v in money_end.items():
+        fs = pside.get(sid2) or "T"
+        sd = side_of(fs, rn)
+        team_money_end[(sd, rn)] = team_money_end.get((sd, rn), 0) + v
 
     erows = []
     for (sd, rn) in sorted(team_eq, key=lambda x: (x[1], x[0])):
         eq = team_eq[(sd, rn)]
         erows.append(dict(
             match_id=mid, round=rn, side=sd,
-            pre_bal=start_eq_team.get((sd, rn), 0), post_bal=team_money.get((sd, rn), 0),
-            end_bal=team_money.get((sd, rn), 0),
+            pre_bal=cash_start_team.get((sd, rn), 0), post_bal=team_money.get((sd, rn), 0),
+            end_bal=team_money_end.get((sd, rn), 0),
             start_eq=start_eq_team.get((sd, rn), 0), end_eq=eq,
             buy_type=_buy_type(eq, rn),
         ))
@@ -849,12 +1001,15 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
     if brows:
         store2.insert_many(conn, "blinds", brows)
 
-    # 购买/捡起/丢下：item_events（列名是 item，不是 item_name）
+    # 购买/捡起/丢下/退款：item_events（列名是 item，不是 item_name）
     urows = []
     try:
+        # 退款类事件也要留：钱包法下花费靠余额差，但退款事件是解释
+        # 「这回合为什么花得少」的证据，丢了就查不出账。
+        _KEEP = ("purchase", "pickup", "drop", "sell", "refund", "item_sell", "return")
         for it in dem.item_events.iter_rows(named=True):
             act = str(it.get("action") or "")
-            if act not in ("purchase", "pickup", "drop") or not it["steamid"]:
+            if act.lower() not in _KEEP or not it["steamid"]:
                 continue
             rn = tick_round(it["tick"]) or 0
             urows.append(dict(
@@ -937,6 +1092,18 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
     try:
         spend_by_cat: dict[tuple, int] = {}
         pur_by_round: dict[tuple, int] = {}
+        # (a) 净购买额：只给甲残差用。买了又退的枪按净额算，
+        #     否则毛额 − 引擎净花费 会系统性把甲压小甚至压成负数。
+        for r in conn.execute(
+                "SELECT round, steamid, "
+                "SUM(CASE WHEN action='purchase' THEN cost ELSE -cost END) c "
+                "FROM purchases WHERE match_id=? "
+                "AND action IN ('purchase','sell','refund','item_sell','return') "
+                "GROUP BY round, steamid",
+                (mid,)):
+            pur_by_round[(int(r["round"]), int(r["steamid"]))] = (r["c"] or 0)
+        # (b) 分类构成：保持毛额，只吃 purchase。退款事件的 item 名不一定
+        #     能和对上的购买行配对，硬减会把分类弄脏。
         for r in conn.execute(
                 "SELECT round, steamid, item, SUM(cost) c FROM purchases "
                 "WHERE match_id=? AND action='purchase' GROUP BY round, steamid, item",
@@ -945,8 +1112,6 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
             sd = side_of(pside.get(sid), int(r["round"]))
             cat = ITEM2CAT.get(str(r["item"] or "").lower(), "misc")
             spend_by_cat[(sd, cat)] = spend_by_cat.get((sd, cat), 0) + (r["c"] or 0)
-            pur_by_round[(int(r["round"]), sid)] = (
-                pur_by_round.get((int(r["round"]), sid), 0) + (r["c"] or 0))
 
         # 回合末快照：本回合现金支出 + 是否有钳子
         from demoparser2 import DemoParser as _DP3
@@ -988,8 +1153,10 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
                 continue
             last_spent[(rn, sid)] = int(row.spent)
 
-        # 甲 = 实际支出 − 已知购买 − 钳子
+        # 甲 = 实际支出 − 已知购买（净额） − 钳子
         armor_by_side: dict[str, int] = {}
+        neg_n = 0          # 残差为负的人次（净购买 > 引擎花费，疑似退款未配对）
+        neg_sum = 0        # 残差为负的总额（负值）
         for (rn, sid), sp in last_spent.items():
             sd = side_of(pside.get(sid), rn)
             if sd is None:
@@ -997,6 +1164,9 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
             diff = sp - pur_by_round.get((rn, sid), 0)
             if diff > 0:
                 armor_by_side[sd] = armor_by_side.get(sd, 0) + diff
+            elif diff < 0:
+                neg_n += 1
+                neg_sum += diff
 
         for sd, n in kit_buys.items():
             spend_by_cat[(sd, "kit")] = n * 400
@@ -1006,6 +1176,28 @@ def ingest_awpy(conn: sqlite3.Connection, demo_path: str,
         for sd in ("CT", "T"):
             if armor_by_side.get(sd, 0) > 0:
                 spend_by_cat[(sd, "armor")] = armor_by_side[sd]
+
+        if neg_n:
+            log(f"  [口径告警] 甲残差为负 {neg_n} 人次 / 共 {abs(neg_sum)} 元"
+                f"（净购买大于引擎花费，可能退款未配对）")
+
+        # 钱包法（start_cash − freeze_end_cash）与引擎 m_iCashSpentThisRound 对账。
+        # 注意 spent_map 的键是 (steamid, round)，last_spent 是 (round, steamid)。
+        # 只告警，不改数据。
+        mism_n = 0
+        mism_max = 0
+        for (rn, sid), sp in last_spent.items():
+            wallet = spent_map.get((sid, rn))
+            if wallet is None:
+                continue
+            d = abs(int(wallet) - int(sp))
+            if d > mism_max:
+                mism_max = d
+            if d > 50:
+                mism_n += 1
+        if mism_n:
+            log(f"  [口径告警] 钱包法与引擎花费不一致 {mism_n} 人次，"
+                f"最大偏差 {mism_max} 元")
 
         srows = [dict(match_id=mid, side=sd, cat=c, cost=v)
                  for (sd, c), v in spend_by_cat.items() if v > 0]
