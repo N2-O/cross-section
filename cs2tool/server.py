@@ -61,10 +61,20 @@ WEB_DIR = os.path.join(HERE, "web")
 BOOT_CFG = os.path.join(BASE, "data", "settings.json")
 S.init(BOOT_CFG)
 _boot = S.load()
+# 配置里的路径只在「确实存在」时才采用：升级换目录后旧绝对路径会失效，
+# 直接沿用会扫到 0 个 demo（用户还得手改 settings.json）。不存在就回落默认。
 if "--demos" not in sys.argv and _boot.get("demos_dir"):
-    DEMO_DIR = os.path.abspath(_boot["demos_dir"])
+    _d = os.path.abspath(_boot["demos_dir"])
+    if os.path.isdir(_d):
+        DEMO_DIR = _d
+    else:
+        print(f"[warn] settings.json 里的 demos_dir 不存在，改用默认目录：{DEMO_DIR}")
 if "--data" not in sys.argv and _boot.get("data_dir"):
-    DATA_DIR = os.path.abspath(_boot["data_dir"])
+    _d = os.path.abspath(_boot["data_dir"])
+    if os.path.isdir(_d):
+        DATA_DIR = _d
+    else:
+        print(f"[warn] settings.json 里的 data_dir 不存在，改用默认目录：{DATA_DIR}")
 DB_PATH = os.path.join(DATA_DIR, "cs2.db")
 for d in (DEMO_DIR, DATA_DIR, os.path.join(DATA_DIR, "overviews")):
     os.makedirs(d, exist_ok=True)
