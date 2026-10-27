@@ -1,5 +1,38 @@
 # Changelog
 
+## v6.3.1 — 2026-10-27
+
+**修 v6.3.0 的致命回归：所有地图的回放都打不开**，页面报 `加载失败: AttributeError: 'Pandas' object has no attribute 'Z'`。
+
+- 根因：`dp.parse_ticks()` 只返回**明确请求**的列。v6.3.0 里我给 samples 加了 `Z`，却没把 `"Z"` 写进请求的 props 列表 → DataFrame 里根本没这列，`row.Z` 必然抛异常。因为异常发生在建缓存之前，所以每张图的回放都失败，和地图本身无关
+- 修法：`Z` 进 props；再抽 `_row_z(row, zcol)` 统一取值（列不在 / NaN / 取不到都返回 `None` 降级，绝不抛）；个别 demoparser 版本不认 `Z` 时自动退回不带 Z 的请求，回放照出、只是不分层
+- `REPLAY_V` 3 → 4：清掉坏的/旧的回放缓存（单层图仍不重建）
+- 教训：这次是**在没有真实 demo 的环境里只验了前端**（桩 JSON）就发版，才让数据侧的字段名错误漏过去。数据侧改动必须对着真实 demo 跑一次 mini build 才能算验过
+
+## v6.3.0 — 2026-10-27
+
+多层图 Z 轴分层（回放）+ 雷达底图补齐。首次打开 nuke / vertigo / train / baggage 的旧回放会重解析一次（约 30 秒），其余地图的缓存不受影响。
+
+### Z 轴分层
+
+多层图（Nuke / Vertigo / Train / Baggage）的回放以前只有一张底图，楼下的人被画在楼上的同一 x/y 上 —— nuke 打 B 点看着像站在楼上。现在按游戏自己的切层规则分开画。
+
+- **数据侧（`cs2tool/rounddata.py`）**：`read_layers()` 从 `overviews/<map>.txt` 的 `verticalsections` 段读出每层的 z 区间（nuke −495 / vertigo 11700 / train −50 / baggage −5，单层图返回 `[]`）；采样数组末尾加 `[12] = Z`（不插值，切层按楼层判断）；响应多带 `layers`。**道具落点与 C4 也带 Z**：手雷/烟/火/闪的落点取事件表的 `x.z`（取不到就留 `None`，前端退回投掷者当时所在层），下包与掉落事件取当事人那一 tick 的坐标 + Z（`bombs[i].x/y/z`）。`REPLAY_V = 3` 标结构版本
+- **缓存自动失效（`cs2tool/server.py`）**：读回放缓存时比对 `replay_v`，不一致就重解析；但**单层图不重建**（它们用不到 Z，多一个空字段而已），否则 38 场回放每场都要重解析 30 秒。实际只有 nuke / vertigo / train / baggage 的 4 场会在首次打开时重建。老缓存缺 Z 也不报错，`s.z == null` 时一律当上层处理
+- **界面侧（`web/replay.html`）**：主画布跟着「正在追的人」切层 —— 上下楼梯时底图自动在 `<map>.png` / `<map>_lower.png` 之间换；另一层有人时右下角开一枚 19% 的小窗**并行**显示（只画点和编号，不画轨迹/特效），没人就自动收起。玩家卡：点一下即追踪（名字加下划线），不在当前层的人卡片压暗到 40%
+- **C4 与道具也分层**：安放的包按 `plant.z` 判断该画在哪层；掉落的包用「掉落那一刻」的坐标与 Z（老缓存缺字段时退回拿包人的当前位置）；手雷/烟/火/闪按落点 Z 过滤，跨层扔的道具只在落点那层出现（拖尾弧线也跟着落点走）
+- 为什么不做左右并排：并排会把主图压成一半，且和「版心不收横滚」冲突；小窗 + 跟随既保住主图尺寸，又不丢另一层的信息
+- **验证**：本地起桩服务 + CDP 截图/取值（`tools/shoot_cdp.mjs`）。单层图回归：`layers=0`、底图 `de_ancient.png`、小窗 `display:none`、无压暗；多层图：追踪楼上的人→`de_nuke.png`，切到楼下的人→`de_nuke_lower.png`，小窗两态都在且标签正确（`下层 · 2 人`）。C4/道具用像素级断言：包下在楼下时上层画布该区域橙色像素 **0**、下层 **130**；同回合烟雾开关的像素差 上层 **0** / 下层 **2,589**
+- 已知限制：落点 Z 依赖事件表里有 `z` 列（服务器上没有 demo，未能在真机实测）——取不到时自动退回投掷者所在层，不报错；`*_lower` 那 4 张图里目前用的是 `at()` 采样的 Z，楼梯过道（同一 xy 两层重叠）会有短暂的层判定抖动
+
+### 雷达底图补齐（`web/maps/`，20 张）
+
+- **雷达底图补齐**：`web/maps/` 一直只有 10 张，缺 `de_cache`（死城之谜）。回放页拿不到图时只在 console 里飘一句「地图底图加载失败」，画布一片空白 —— 看起来像回放坏了。库里 5 场 cache（含 10-27 两场）全部受影响
+- **图源改成与原套同源**：先按 `MurkyYT/cs2-map-icons` 的 depot 直出图补了 cache，随后发现现有 10 张与 `pnxenopoulos/awpy-data` release `2000935` 的 `images.zip` **逐像素相同**（dust2 / mirage / vertigo 差异 0.0%，仅 PNG 编码不同）—— 也就是说原始那套就是从 awpy-data 拿的。于是整目录改用该 release 全量 20 张，风格一致、以后不会再出现"补的那张和别的不一样"
+- **补齐后 20 张**：ancient(+night) / anubis / cache / dust2 / inferno / mirage / nuke(+lower) / overpass / train(+lower) / vertigo(+lower) / ar_baggage(+lower) / ar_shoots(+night) / cs_italy / cs_office
+- **对齐校验（不是"看着像"）**：用 `/api/replay` 里已转成像素的真实轨迹直接叠图算命中率 —— cache 由换源前的 96.6% 提到 **100.0%**；受美术版本影响的 5 张（anubis 99.7 / inferno 100.0 / nuke 99.9 / overpass 99.8 / ancient 99.2）新老版本命中率同档，说明差异只在美术不在几何。`map_data.json` 的 pos/scale 与 `overviews/*.txt` 逐项对上（cache −2000/3250/5.5、train −2308/2078/4.082077）
+- 仍未覆盖：`de_dust` / `de_inferno_s2` / `de_ancient_v1` / `de_ancient_v2` / `de_overpass_2v2` / `rush_001` / `workshop_preview` —— 只有 txt 参数没有官方雷达（老版本与特殊模式），等真有对局再说
+
 ## v6.2.6 — 2026-10-25
 新增**能力画像**板块（七维技能评分）＋伤害口径统一（**历史对局需重新解析**才会更新）。
 

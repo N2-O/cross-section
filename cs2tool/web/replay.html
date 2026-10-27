@@ -443,6 +443,15 @@ button:active{transform:translateY(1px)}
          padding:4px 11px;border-radius:11px;pointer-events:none;
          opacity:0;transition:opacity .25s;z-index:3;white-space:nowrap}
 #wrap:hover #zoomTip{opacity:1}
+/* 多层图（Nuke/Vertigo/Train）的并行小窗：主图跟着被追踪的人切层，另一层有人在时
+   右下角出一枚 1/5 大小的画面，只画点。直角、无边框，跟主画布同源不另起一套样式。
+   选择器要压过 `#wrap canvas` 的 width/height:100%（那条是给主画布用的） */
+#wrap #icv{position:absolute;right:12px;bottom:12px;width:19%;height:auto;aspect-ratio:1/1;
+     display:none;border-radius:2px;pointer-events:none;z-index:2;
+     background:rgba(10,10,11,.92)!important;opacity:.94}
+.pl.tracked .nm{color:#fff;text-decoration:underline;text-decoration-color:rgba(255,255,255,.38);
+                text-underline-offset:3px}
+.pl.offlayer{opacity:.4}
 /* 变速控制：外框 6px，内缩 2px，选中块 4px 圆角（同心，不露直角） */
 .spd{display:flex;border:1px solid var(--ui-bd);border-radius:var(--ui-r);
      overflow:hidden;background:var(--ui-bg2);padding:2px;gap:1px;isolation:isolate}
@@ -754,6 +763,7 @@ thead th,tr.tm td,#zoomTip,.legend{font-size:var(--t1)!important}
     <canvas id="cv" width="1024" height="1024"></canvas>
     <span id="zoomLbl"></span>
     <div id="zoomTip">滚轮缩放 · 拖拽平移 · 双击复位</div>
+    <canvas id="icv" width="1024" height="1024"></canvas>
   </div></div>
   <div class="roster" id="right">
     <div id="rosterOp"></div>
@@ -817,6 +827,12 @@ thead th,tr.tm td,#zoomTip,.legend{font-size:var(--t1)!important}
 const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
 const bg=new Image();
 let D=null,R=null,cur=0,now=0,playing=false,raf=null,half=12;
+/* Z 轴分层：LAYERS 来自数据（多层图才有），bgLayerSeen 记录当前 bg 装的是哪一层，
+   trackName = 「正在追的人」，主画布跟着他上下楼 */
+let LAYERS=[],bgLayerSeen=-1,trackName=null;
+const ibg={};                       /* 小窗用的另一层底图缓存 */
+const icv=document.getElementById('icv');
+const ictx=icv?icv.getContext('2d'):null;
 const vis={},opt={trail:false,shot:true,util:true,face:true,speed:1};
 const view={s:1,x:0,y:0};
 const $=s=>document.querySelector(s);
@@ -904,11 +920,13 @@ function at(p,t){
   if(!s||!s.length)return OFFSCREEN;
   const[i,j,r]=pick(s,t);
   if(i===j||r===0){const q=s[i];return{x:q[1],y:q[2],yaw:q[3],hp:q[4],arm:q[5],hel:q[6],
-    money:q[7],flash:q[8],w:q[9],alive:q[10],def:q[11]};}
+    money:q[7],flash:q[8],w:q[9],alive:q[10],def:q[11],z:q[12]};}
   const A=s[i],B=s[j];
   return{x:lerp(A[1],B[1],r),y:lerp(A[2],B[2],r),yaw:angLerp(A[3],B[3],r),
     hp:Math.round(lerp(A[4],B[4],r)),arm:Math.round(lerp(A[5],B[5],r)),hel:A[6],
-    money:A[7],flash:A[8],w:A[9],alive:r<0.5?A[10]:B[10],def:r<0.5?A[11]:B[11]};
+    money:A[7],flash:A[8],w:A[9],alive:r<0.5?A[10]:B[10],def:r<0.5?A[11]:B[11],
+    /* Z 不插值：切层是按楼层判断的，插值反而会在楼梯上抖 */
+    z:(r<0.5?A[12]:B[12])};
 }
 function kdOf(p,t){let k=0,d=0,a=0;for(const x of R[cur].kills){if(x[0]>t)break;
   if(x[1]===p.name)k++;if(x[2]===p.name)d++;if(x[5]===p.name)a++;}return[k,d,a];}
@@ -927,8 +945,8 @@ function c4State(t){
   const r=R[cur];let st={phase:'carry',who:r.c4||''};
   for(const b of (r.bombs||[])){if(b.t>t)break;
     if(b.type==='pickup')st={phase:'carry',who:b.who};
-    else if(b.type==='drop')st={phase:'ground',who:b.who,t:b.t};
-    else if(b.type==='plant')st={phase:'planted',t:b.t,x:b.x,y:b.y,site:b.site,who:b.who};
+    else if(b.type==='drop')st={phase:'ground',who:b.who,t:b.t,x:b.x,y:b.y,z:b.z};
+    else if(b.type==='plant')st={phase:'planted',t:b.t,x:b.x,y:b.y,z:b.z,site:b.site,who:b.who};
     else if(b.type==='defuse')st={phase:'defused',t:b.t,who:b.who};
     else if(b.type==='explode')st={phase:'exploded',t:b.t};}
   return st;
@@ -984,9 +1002,23 @@ function buildRoster(){
   const useMine = _mineN > 0 && _mineN < r.players.length;
   mk($('#rosterMine'), useMine ? r.players.filter(p=>p.mine) : _ct, false);
   mk($('#rosterOp'),  useMine ? r.players.filter(p=>!p.mine) : _t, true);
+  /* 点玩家卡 = 追踪他：多层图主画布会跟着他上下楼，tab 面板的「回合表现」也切到他 */
+  for(const box of [$('#rosterMine'),$('#rosterOp')]){
+    for(const el of box.querySelectorAll('.pl')){
+      el.onclick=()=>{
+        const id=el.id.replace(/^pl_/,'');
+        const p=R[cur].players.find(q=>String(q.sid!=null?q.sid:CSS.escape(q.name))===id);
+        if(!p)return;
+        trackName=p.name;perfWho=p.name;
+        if($('#tabpanel').classList.contains('on'))buildTab();
+        draw();
+      };
+    }
+  }
 }
 function updateRoster(){
   const r=R[cur],st=c4State(now);
+  const mL=mainLayer(),tp=trackedPlayer(r);
   for(const p of r.players){
     const el=$('#pl_'+(p.sid != null ? p.sid : CSS.escape(p.name)));if(!el)continue;
     // 已经掉线（当前回合晚于离开回合）就不再显示这条玩家卡
@@ -994,6 +1026,9 @@ function updateRoster(){
     if(vis[p.name]===false){el.style.display='none';continue;}
     el.style.display='';
     const s=at(p,now),kd=kdTotal(p,now);
+    /* 追踪对象 + 不在当前层的人（主图上看不到他，卡片压暗给个交代） */
+    el.classList.toggle('tracked',!!tp&&tp.name===p.name);
+    el.classList.toggle('offlayer',hasLayers()&&s.z!=null&&layerOf(s.z)!==mL);
     el.classList.toggle('dead',!s.alive);
     el.classList.toggle('flashed',!!s.alive&&(s.flash||0)>0.4);
     const hpv=el.querySelector('[data-hpv]'), hpf=el.querySelector('[data-hpfill]');
@@ -1253,32 +1288,129 @@ function drawC4(x,y,st){
     ctx.fillText(fmt(Math.max(0,40-(now-st.t))),x+10,y-7);
   }
 }
+/* ===== Z 轴分层（多层图） =====
+   底图：上层 <map>.png、下层 <map>_lower.png（overview 里 verticalsections 的名字）。
+   规则：主画布跟着「正在追的人」所在的层走；另一层有人在的时候，右下角开一枚
+   小窗并行显示（只画点，不画轨迹/特效），这样不用把主图压成一半也能同时看到楼上楼下。 */
+const hasLayers=()=>LAYERS.length>1;
+function layerOf(z){
+  if(!hasLayers()||z==null)return 0;
+  for(let i=0;i<LAYERS.length;i++){const L=LAYERS[i];if(z<=L.zmax&&z>=L.zmin)return i;}
+  return 0;
+}
+function mapImage(li){
+  const L=LAYERS[li];
+  return '/maps/'+D.map+((L&&L.name!=='default')?'_'+L.name:'')+'.png';
+}
+function layerLabel(li){
+  const L=LAYERS[li];if(!L)return '';
+  return L.name==='default'?'上层':(L.name==='lower'?'下层':L.name);
+}
+function trackedPlayer(r){
+  r=r||R[cur];
+  const nm=trackName;
+  return (nm&&r.players.find(p=>p.name===nm))
+      || r.players.find(p=>p.isMe) || r.players[0] || null;
+}
+function mainLayer(){
+  if(!hasLayers())return 0;
+  const p=trackedPlayer();if(!p)return 0;
+  const s=at(p,now);
+  return (s&&s.z!=null)?layerOf(s.z):0;
+}
+/* 底图切层：只有换层才重设 src，靠 onload 回调再补一帧，避免每帧都重载 */
+/* 道具落在哪一层：优先用事件给的落点 Z，没有就退回投掷者当时所在层。
+   单层图返回 null（= 不参与分层过滤） */
+function nadeLayer(g,r){
+  if(!hasLayers())return null;
+  r=r||R[cur];
+  const gz=g[7];
+  if(gz!=null&&gz!==undefined)return layerOf(gz);
+  const gp=r.players.find(q=>q.name===g[1]);
+  const s=gp?at(gp,g[2]):null;
+  return (s&&s.z!=null)?layerOf(s.z):null;
+}
+function ensureBg(li){
+  if(bgLayerSeen===li)return;
+  bgLayerSeen=li;
+  bg.src=mapImage(li);
+}
+function otherLayerBg(li){
+  if(!ibg[li]){
+    const im=new Image();
+    im.onload=()=>{if(!playing)draw();};
+    im.src=mapImage(li);
+    ibg[li]=im;
+  }
+  return ibg[li];
+}
+function drawInset(mainL){
+  if(!icv||!ictx)return;
+  if(!hasLayers()){icv.style.display='none';return;}
+  const oL=LAYERS.findIndex((_,i)=>i!==mainL);
+  if(oL<0){icv.style.display='none';return;}
+  const r=R[cur];
+  const list=r.players.filter(p=>{
+    if(vis[p.name]===false)return false;
+    const s=at(p,now);
+    return s&&s.z!=null&&s.alive&&layerOf(s.z)===oL;
+  });
+  if(!list.length){icv.style.display='none';return;}   /* 另一层没人就不占地方 */
+  icv.style.display='block';
+  ictx.setTransform(1,0,0,1,0,0);
+  ictx.clearRect(0,0,1024,1024);
+  ictx.fillStyle='#0a0a0b';ictx.fillRect(0,0,1024,1024);
+  const im=otherLayerBg(oL);
+  if(im.complete)ictx.drawImage(im,0,0,1024,1024);
+  /* 小窗只有主画的 ~1/5，点与字号都要按 1024 画布放大，否则缩下去看不见 */
+  for(const p of list){
+    const s=at(p,now);
+    ictx.beginPath();ictx.arc(s.x,s.y,26,0,7);
+    ictx.fillStyle=p.pcolor;ictx.fill();
+    ictx.lineWidth=7;ictx.strokeStyle='#050505';ictx.stroke();
+    ictx.fillStyle='#050505';ictx.font='700 26px system-ui';ictx.textAlign='center';
+    ictx.fillText(p.idx,s.x,s.y+9);ictx.textAlign='left';
+  }
+  ictx.fillStyle='rgba(0,0,0,.58)';ictx.fillRect(0,0,1024,132);
+  ictx.fillStyle='#d6d6d9';ictx.font='600 76px system-ui';
+  ictx.fillText(layerLabel(oL)+' · '+list.length+' 人',30,92);
+}
 function draw(){
   ctx.setTransform(1,0,0,1,0,0);
   ctx.clearRect(0,0,1024,1024);
   ctx.fillStyle = window.__mapBg || '#0a0a0b';
   ctx.fillRect(0,0,1024,1024);
   /* 地图缩放/平移 */
+  const L=mainLayer();
+  ensureBg(L);
   ctx.setTransform(view.s,0,0,view.s,view.x,view.y);
   if(bg.complete)ctx.drawImage(bg,0,0,1024,1024);
   const r=R[cur];
+  const onL=s=>!hasLayers()||s==null||s.z==null||layerOf(s.z)===L;
+  /* 没有实体坐标的东西（C4/道具落点）用它自己的 Z；拿不到就当上层 */
+  const onZ=z=>!hasLayers()||z==null||layerOf(z)===L;
   if(opt.util){
     for(const g of r.grenades){
-      const[kind,who,ts,te,gx,gy,gside]=g,fly=0.75;
+      const[kind,who,ts,te,gx,gy,gside,gz]=g,fly=0.75;
       if(now<ts-fly||now>te)continue;
+      const gL=nadeLayer(g,r);
+      if(gL!=null&&gL!==L)continue;
       if(now<ts){
         const p=r.players.find(q=>q.name===who);if(!p)continue;
-        const s=at(p,ts-0.2),rr=(now-(ts-fly))/fly;
+        const s=at(p,ts-0.2);
+        const rr=(now-(ts-fly))/fly;
         const x=lerp(s.x,gx,rr),y=lerp(s.y,gy,rr)-Math.sin(rr*Math.PI)*24;
         ctx.globalAlpha=.4;ctx.strokeStyle=gside==='T'?'#d8a83c':'#5b8fd4';ctx.lineWidth=1;
         ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(s.x,s.y);ctx.lineTo(x,y);ctx.stroke();
         ctx.setLineDash([]);ctx.globalAlpha=1;
         drawNade(kind,x,y,0.1,gside,true);
-      }else drawNade(kind,gx,gy,te-now,gside);
+      }else{
+        drawNade(kind,gx,gy,te-now,gside);
+      }
     }
   }
   const st=c4State(now);
-  if(st.phase==='planted')drawC4(st.x,st.y,st);
+  if(st.phase==='planted'&&onZ(st.z))drawC4(st.x,st.y,st);
   if(opt.shot){
     for(const s of r.shots){
       if(s[0]>now||now-s[0]>0.15)continue;
@@ -1293,7 +1425,7 @@ function draw(){
     const win=Math.max(2.5,r.dur*0.22);
     for(const p of r.players){
       if(vis[p.name]===false)continue;
-      const pts=p.s.filter(q=>q[0]<=now&&now-q[0]<=win);
+      const pts=p.s.filter(q=>q[0]<=now&&now-q[0]<=win&&(!hasLayers()||layerOf(q[12])===L));
       if(pts.length<2)continue;
       for(let i=1;i<pts.length;i++){
         ctx.globalAlpha=Math.max(.22,1-(now-pts[i][0])/win)*.95;
@@ -1305,14 +1437,18 @@ function draw(){
   }
   for(const p of r.players){
     if(vis[p.name]===false)continue;
-    drawPlayer(p,at(p,now),SC(p.side),p.idx);
+    const s=at(p,now);
+    if(!onL(s))continue;                 /* 另一层的人不画在主图上 */
+    drawPlayer(p,s,SC(p.side),p.idx);
   }
   if(st.phase==='carry'&&st.who){
     const p=r.players.find(q=>q.name===st.who);
-    if(p){const s=at(p,now);if(s.alive)drawC4(s.x+9,s.y+9,st);}
+    if(p){const s=at(p,now);if(s.alive&&onL(s))drawC4(s.x+9,s.y+9,st);}
   }else if(st.phase==='ground'){
+    /* 掉落的包用「掉落那一刻」的坐标与 Z（老缓存没有 x/y 就退回拿包的人当前位置） */
     const p=r.players.find(q=>q.name===st.who);
-    if(p){const s=at(p,now);drawC4(s.x,s.y,st);
+    const s=(st.x!=null&&st.y!=null)?{x:st.x,y:st.y,z:st.z}:(p?at(p,now):null);
+    if(s&&onL(s)){drawC4(s.x,s.y,st);
       ctx.globalAlpha=.5;ctx.strokeStyle='#ffcf3a';ctx.lineWidth=1.4;
       ctx.beginPath();ctx.arc(s.x,s.y,14+2*Math.sin(now*6),0,7);ctx.stroke();ctx.globalAlpha=1;}
   }
@@ -1328,6 +1464,7 @@ function draw(){
     ctx.globalAlpha=1;
   }
   updateTop();updateRoster();drawRWS();drawKillLog();
+  drawInset(L);
   $('#time').value=now;
   $('#clock').textContent=now.toFixed(1)+' / '+r.dur.toFixed(1)+'s';
   /* 面板只在回合变化时重建（播放中每帧重建会让点击落空） */
@@ -1501,7 +1638,7 @@ function buildPerfAxis(){
     selEl.dataset.built='1';
     selEl.innerHTML=allP.map(p=>`<option value="${p.name}">${p.name}${p.isMe?' (你)':''}</option>`).join('');
     selEl.value=selWho;
-    selEl.onchange=()=>{perfWho=selEl.value;buildTab();};
+    selEl.onchange=()=>{perfWho=selEl.value;trackName=perfWho;buildTab();draw();};
   }else if(selEl&&selEl.value!==selWho){
     selEl.value=selWho;
   }
@@ -1983,6 +2120,9 @@ document.addEventListener('keydown',e=>{
   if(!D.rounds){$('#loading').textContent='加载失败: '+(D.error||'');return;}
   R=D.rounds;
   half=12;
+  /* 多层图（Nuke / Vertigo / Train / Baggage）的分层高度，单层图为 []。
+     数据侧来自 overviews/*.txt 的 verticalsections，跟游戏内切层规则一致 */
+  LAYERS=(D.layers||[]);
   const _m0=R[0].players.filter(p=>p.mine).map(p=>p.name);
   const _hasMine=_m0.length>0 && _m0.length<R[0].players.length;
   const mine0=_hasMine?_m0:R[0].players.filter(p=>p.side==='CT').map(p=>p.name);
@@ -2003,7 +2143,7 @@ document.addEventListener('keydown',e=>{
   });
   bg.onload=()=>draw();          /* 地图异步加载完成后再画一次 */
   bg.onerror=()=>{console.warn('地图底图加载失败:',bg.src);draw();};
-  bg.src='/maps/'+D.map+'.png';
+  bgLayerSeen=0;bg.src=mapImage(0);
   $('#loading').remove();
   cur=0;now=R[0].fz;sync();
   /* ?tab=stats|util|chart（chart 里再带 &mode=econ 可直接看经济图） */

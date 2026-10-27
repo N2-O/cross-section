@@ -22,7 +22,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
 
-VERSION = "6.2.6"
+VERSION = "6.3.1"
 # 开源发布仓库（检查新版本用）
 REPO_SLUG = "N2-O/cross-section"
 RELEASES_URL = f"https://github.com/{REPO_SLUG}/releases"
@@ -997,8 +997,25 @@ class Handler(BaseHTTPRequestHandler):
                 mid = int(qs.get("m", qs.get("match", ["0"]))[0] or 0)
                 rp = os.path.join(REPLAY_DIR, f"{mid}.json")
                 if os.path.exists(rp):
-                    with open(rp, "rb") as f:
-                        return self._send(200, "application/json; charset=utf-8", f.read())
+                    # 缓存带结构版本：回放数据结构改过（比如 samples 加 Z）就作废重建，
+                    # 免得老缓存少了新字段、前端画不出分层。但**单层图**不重建 —— 它们
+                    # 用不到 Z，多一个空字段而已，没必要让几十场回放都重解析 30 秒
+                    try:
+                        with open(rp, "rb") as f:
+                            _raw = f.read()
+                        _d = json.loads(_raw)
+                        if _d.get("replay_v") == rounddata.REPLAY_V:
+                            return self._send(200, "application/json; charset=utf-8", _raw)
+                        _mp = _d.get("map") or ""
+                        _ovp = os.path.join(OVERVIEW_DIR, _mp + ".txt")
+                        _multi = False
+                        if _mp and os.path.isfile(_ovp):
+                            _multi = bool(rounddata.read_layers(
+                                open(_ovp, encoding="utf-8", errors="replace").read()))
+                        if not _multi:
+                            return self._send(200, "application/json; charset=utf-8", _raw)
+                    except Exception:
+                        pass
                 row = _conn.execute("SELECT file FROM matches WHERE id=?", (mid,)).fetchone()
                 if not row:
                     return self._send(*_json({"ok": False, "error": "match 不存在"}, 404))

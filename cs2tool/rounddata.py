@@ -19,7 +19,65 @@ def read_overview(overviews_dir: str, map_name: str) -> dict:
             f"复制进上面这个目录即可，或在「设置」里填写 CS2 安装目录。"
         )
     txt = open(p, encoding="utf-8", errors="replace").read()
-    return {m.group(1): m.group(2) for m in re.finditer(r'"([A-Za-z_]+)"\s+"([^"]*)"', txt)}
+    kv = {m.group(1): m.group(2) for m in re.finditer(r'"([A-Za-z_]+)"\s+"([^"]*)"', txt)}
+    kv["__layers"] = read_layers(txt)
+    return kv
+
+
+#: 回放数据结构版本。samples 增删字段就 +1，server 端比对后自动重建旧缓存。
+REPLAY_V = 4
+
+
+def _row_z(row, zcol):
+    """取一行的世界 Z；列不在、值是 NaN 或取不到时返回 None（分层功能降级，不影响出图）。"""
+    if not zcol:
+        return None
+    v = getattr(row, zcol, None)
+    try:
+        if v is None or v != v:
+            return None
+        return round(float(v), 1)
+    except (TypeError, ValueError):
+        return None
+
+
+def read_layers(txt: str) -> list:
+    """从 overview 的 verticalsections 段读出分层高度。
+
+    只有多层图（Nuke / Vertigo / Train / Baggage）才有这一段，单层图返回 []。
+    每层给一个 z 区间，前端按玩家 Z 落在哪一层决定用哪张底图（上层 <map>.png、
+    下层 <map>_lower.png），跟游戏内小地图切层的规则一致。
+    """
+    i = txt.find('"verticalsections"')
+    if i < 0:
+        return []
+    j = txt.find("{", i)
+    if j < 0:
+        return []
+    depth, k = 0, j
+    while k < len(txt):
+        ch = txt[k]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                break
+        k += 1
+    layers, cur = [], None
+    for line in txt[j + 1:k].splitlines():
+        s = line.strip()
+        if not s or s.startswith("//"):
+            continue
+        m = re.match(r'"([A-Za-z0-9_]+)"', s)
+        if m and not m.group(1).startswith("Altitude"):
+            cur = {"name": m.group(1), "zmin": None, "zmax": None}
+            layers.append(cur)
+            continue
+        m = re.search(r'"Altitude(Min|Max)"\s+"([-\d.]+)"', s)
+        if m and cur is not None:
+            cur["zmin" if m.group(1) == "Min" else "zmax"] = float(m.group(2))
+    return [x for x in layers if x["zmin"] is not None and x["zmax"] is not None]
 
 
 def toid(v):
@@ -48,12 +106,29 @@ def short_weapon(w: str) -> str:
     return SHORT.get(w, w)
 
 
+#: parse_ticks 只返回「明确请求」的列。不把 Z 写进 props，DataFrame 里压根没这列，
+#: 后面 row.Z 必然 AttributeError（6.3.0 就这么翻的车，所有地图回放全打不开）。
+TICK_PROPS = ["X", "Y", "health", "armor", "has_helmet", "is_alive", "team_num",
+              "yaw", "pitch", "inventory", "balance", "flash_duration", "has_defuser"]
+
+
+def parse_ticks_with_z(dp, all_ticks):
+    """取 tick 数据，尽量带上 Z；拿不到就降级（返回 zcol=None，回放照出、只是不分层）。"""
+    try:
+        ticks = dp.parse_ticks(TICK_PROPS + ["Z"], ticks=all_ticks)
+    except Exception:
+        ticks = dp.parse_ticks(TICK_PROPS, ticks=all_ticks)
+        return ticks, None
+    return ticks, ("Z" if "Z" in getattr(ticks, "columns", []) else None)
+
+
 def build(conn, match_id: int, demo_path: str, overviews_dir: str, step: int = 16) -> dict:
     m = conn.execute("SELECT map FROM matches WHERE id=?", (match_id,)).fetchone()
     if not m:
         raise RuntimeError("match 不存在")
     map_name = m["map"]
     kv = read_overview(overviews_dir, map_name)
+    layers = kv.pop("__layers", [])          # 多层图的 z 分层区间，单层图为 []
     pos_x, pos_y, scale = float(kv["pos_x"]), float(kv["pos_y"]), float(kv["scale"])
 
     half = 12
@@ -113,9 +188,7 @@ def build(conn, match_id: int, demo_path: str, overviews_dir: str, step: int = 1
     all_ticks = []
     for s0, s1 in span:
         all_ticks.extend(range(s0, s1 + 1, step))
-    ticks = dp.parse_ticks(["X", "Y", "health", "armor", "has_helmet", "is_alive", "team_num",
-                            "yaw", "pitch", "inventory", "balance", "flash_duration",
-                            "has_defuser"], ticks=all_ticks)
+    ticks, _zcol = parse_ticks_with_z(dp, all_ticks)
     ticks = ticks[ticks.X.abs() > 1]
     # 当前手持武器（inventory 只是背包，顺序不固定，不能当手持用）
     try:
@@ -237,7 +310,10 @@ def build(conn, match_id: int, demo_path: str, overviews_dir: str, step: int = 1
                                 int(bool(row.has_helmet)), int(row.balance),
                                 round(float(row.flash_duration), 2),
                                 main or (inv[0] if inv else ""), int(bool(row.is_alive)),
-                                int(bool(row.has_defuser))])
+                                int(bool(row.has_defuser)),
+                                # [12] 世界坐标 Z：多层图（Nuke/Vertigo/Train/Baggage）靠它
+                                # 判断这个人在楼上还是楼下，前端据此切 <map>_lower.png
+                                _row_z(row, _zcol)])
             same_team = (p["first_side"] == my_first_side) if my_first_side else (sid == my_steamid)
             _nm = (p["name"] or "").strip()
             plist.append({"name": _nm or f"玩家{sid % 10000:04d}", "sid": sid,
@@ -283,7 +359,11 @@ def build(conn, match_id: int, demo_path: str, overviews_dir: str, step: int = 1
                 sid_g = toid(x.user_steamid)
                 name = players_db.get(sid_g, {}).get("name", "")
                 gside = side_at(sid_g, rd)
-                grenades.append([kind, name, ts, te, px(x.x), py(x.y), gside])
+                # 落点世界 Z：多层图靠它把道具画在楼下/楼上（事件表给不出就置 None，
+                # 前端会退回用投掷者当时所在层）
+                gz = getattr(x, "z", None)
+                gz = None if gz is None or gz != gz else round(float(gz), 1)
+                grenades.append([kind, name, ts, te, px(x.x), py(x.y), gside, gz])
 
         # 道具使用统计：投出数 / 生效时长 / 伤害（HE、火分开）/ 被闪时长
         util = {}
@@ -291,7 +371,7 @@ def build(conn, match_id: int, demo_path: str, overviews_dir: str, step: int = 1
             return util.setdefault(nm, {"smoke": 0, "molotov": 0, "flash": 0, "he": 0,
                                         "decoy": 0, "sec": 0.0, "dmg": 0,
                                         "he_dmg": 0, "fire_dmg": 0, "flash_sec": 0.0})
-        for kind, nm, ts_, te_, gx, gy, gside in grenades:
+        for kind, nm, ts_, te_, gx, gy, gside, gz in grenades:
             if not nm:
                 continue
             u = _u(nm)
@@ -347,9 +427,8 @@ def build(conn, match_id: int, demo_path: str, overviews_dir: str, step: int = 1
                 ts = round((x.tick - t0) / 64.0, 2)
                 who = players_db.get(toid(getattr(x, "user_steamid", -1)), {}).get("name", "")
                 rec = {"t": ts, "type": typ, "who": who}
-                if typ == "plant":
-                    site = int(getattr(x, "site", 0))
-                    rec["site"] = "A" if site == 210 else ("B" if site == 209 else str(site))
+                # 下包/掉落都记下当时的坐标与 Z，拆包点、掉落点才能在多层图上落到正确楼层
+                if typ in ("plant", "drop"):
                     g2 = by_pid.get(toid(getattr(x, "user_steamid", -1)))
                     if g2 is not None and not g2.empty:
                         i3 = int(g2.tick.searchsorted(x.tick, side="right")) - 1
@@ -357,6 +436,10 @@ def build(conn, match_id: int, demo_path: str, overviews_dir: str, step: int = 1
                             i3 = 0
                         rec["x"] = px(g2.iloc[i3].X)
                         rec["y"] = py(g2.iloc[i3].Y)
+                        rec["z"] = _row_z(g2.iloc[i3], _zcol)
+                if typ == "plant":
+                    site = int(getattr(x, "site", 0))
+                    rec["site"] = "A" if site == 210 else ("B" if site == 209 else str(site))
                     rec["carrier"] = carry
                 if typ == "pickup":
                     carry = who
@@ -442,4 +525,4 @@ def build(conn, match_id: int, demo_path: str, overviews_dir: str, step: int = 1
             p["hs"] = round((st.get("hs") or 0) / k * 100, 0) if k else 0
 
     return {"map": map_name, "pos": [pos_x, pos_y, scale], "match_id": match_id,
-            "rounds": out_rounds}
+            "replay_v": REPLAY_V, "layers": layers, "rounds": out_rounds}
