@@ -739,13 +739,20 @@ def _db_key(conn: sqlite3.Connection) -> str:
 
 
 def _fingerprint(conn: sqlite3.Connection) -> tuple:
-    """数据指纹：场数 / 人场数 / 击杀数。任何一个变了就重算分布。"""
+    """数据指纹：场数 / 人场数 / 击杀数 / 未排除场数。任何一个变了就重算分布。
+
+    最后一项不能省：基准只统计「勾选（未排除）」的对局，而前三项在勾选框
+    增删时完全不变 —— 缓存会一直拿着旧集合的分布，目标却是新集合的数据。
+    实测 2026-11-05：先只留 13 场算过一次基准、再把 34 场勾回来，火力被拿去
+    和「只剩高光 13 场」的分布比，z=-2.81、百分位直接掉到 0。
+    """
     def one(sql: str) -> int:
         r = conn.execute(sql).fetchone()
         return int(r[0] or 0) if r else 0
     return (one("SELECT COUNT(*) FROM matches"),
             one("SELECT COUNT(DISTINCT match_id || '-' || steamid) FROM pms"),
-            one("SELECT COUNT(*) FROM kills"))
+            one("SELECT COUNT(*) FROM kills"),
+            one("SELECT COUNT(*) FROM matches WHERE excluded IS NULL OR excluded=0"))
 
 
 def baseline(conn: sqlite3.Connection, side: str | None = None) -> dict:
