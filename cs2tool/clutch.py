@@ -97,8 +97,18 @@ def build(conn: sqlite3.Connection, steamid: int,
             enemies = _side_rivals(my_side)
 
             evs = per_round.get(rn, [])
-            # 该玩家本回合击杀数（多杀统计）
-            my_kills = sum(1 for k in evs if k["attacker_steamid"] == steamid)
+            # 该玩家本回合「有效击杀数」（多杀统计）。必须排掉两类假击杀：
+            #   · world / 同号：attacker == victim（掉虚空、自杀）
+            #   · teamkill：同队互杀（手雷炸队友）
+            # 不排的话，「手雷炸死两个队友 + 三杀」会被记成 5K —— 实测 m32 r1
+            # 就是这么来的（2 个 TK + 3 个敌人），界面上多出一个「五杀」。
+            def _real_kill(k) -> bool:
+                a, v = int(k["attacker_steamid"] or 0), int(k["victim_steamid"] or 0)
+                if a == v:
+                    return False
+                return side_of.get(a) != side_of.get(v)
+            my_kills = sum(1 for k in evs
+                           if _real_kill(k) and int(k["attacker_steamid"] or 0) == steamid)
             if my_kills >= 2:
                 mk[str(min(my_kills, 5))] = mk.get(str(min(my_kills, 5)), 0) + 1
 
