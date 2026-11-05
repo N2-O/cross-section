@@ -33,13 +33,17 @@ function hint(msg, ok) {
   h.className = 'hint' + (ok ? ' ok' : '');
   h.textContent = msg;
 }
-function table(cols, rows) {
+/* 通用表：cols=列定义，rows=数据；rowClass 可选，返回该行的 class（如排除行 'x'） */
+function table(cols, rows, rowClass) {
   if (!rows || !rows.length) return '<div class="nil">—</div>';
   const th = cols.map(c => `<th class="${c.num ? 'num' : ''}"${c.title ? ` title="${esc(c.title)}"` : ''}>${esc(c.t)}</th>`).join('');
-  const tr = rows.map(r => '<tr>' + cols.map(c => {
-    const v = c.get ? c.get(r) : r[c.f];
-    return `<td class="${c.num ? 'num' : ''}">${v == null || v === '' ? '—' : v}</td>`;
-  }).join('') + '</tr>').join('');
+  const tr = rows.map((r, i) => {
+    const cls = rowClass ? (rowClass(r, i) || '') : '';
+    return `<tr${cls ? ` class="${cls}"` : ''}>` + cols.map(c => {
+      const v = c.get ? c.get(r) : r[c.f];
+      return `<td class="${c.num ? 'num' : ''}">${v == null || v === '' ? '—' : v}</td>`;
+    }).join('') + '</tr>';
+  }).join('');
   return `<table class="tb"><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table>`;
 }
 const minibar = (v, max) => {
@@ -226,7 +230,7 @@ function renderGames() {
         if (!r.analyzed) return `<span class="op"><button data-analyze="${nm}">分析</button>${tail}</span>`;
         return `<span class="op"><a href="/replay.html?m=${r.match_id}" target="_blank" rel="noopener" title="看这场回放">回放 →</a>${tail}</span>`;
     } },
-  ], rows);
+  ], rows, r => (r.excluded ? 'x' : ''));
 
   $$('#gameTable button[data-analyze]').forEach(b => {
     b.onclick = async () => {
@@ -527,5 +531,45 @@ document.addEventListener('change', async (e) => {
   hint(on ? `match ${mid} 已排除，不计入平均与走势` : `match ${mid} 恢复计入`, true);
   load();
 });
+
+/* ===== 批量计入开关 =====
+   全选：除投降局外全部勾上（投降局保持排除，不让人手滑把摆烂局算回平均）。
+   全不选：全部排除。逐场打 /api/set_excluded，最后统一刷新一次。 */
+async function bulkExclude(mode) {
+  const list = (S.demos || []).filter(d => d.match_id);
+  if (!list.length) return;
+  const isSurrender = d => /投降/.test(String(d.exclude_note || ''));
+  const jobs = list.map(d => ({
+    match_id: d.match_id,
+    excluded: mode === 'off' ? 1 : (isSurrender(d) ? 1 : 0),
+  }));
+  const keep = jobs.filter(j => j.excluded).length;
+  const q = mode === 'off'
+    ? `全部排除？\n\n${jobs.length} 场都会变成「不计入」，平均、走势、能力画像会只剩空数据。`
+    : `全部计入？\n\n${jobs.length - keep} 场勾上，${keep} 场投降局保持排除。`;
+  if (!confirm(q)) return;
+  hint(`正在设置 ${jobs.length} 场…`);
+  let fail = 0;
+  for (let i = 0; i < jobs.length; i++) {
+    const j = jobs[i];
+    let r = {};
+    try { r = await post('/api/set_excluded', { match_id: j.match_id, excluded: j.excluded }); }
+    catch (e) { r = { ok: false }; }
+    if (!r || !r.ok) fail++;
+    if (i % 10 === 9) hint(`正在设置 ${i + 1}/${jobs.length}…`);
+  }
+  hint(fail ? `完成，${fail} 场失败` : (mode === 'off' ? '已全部排除' : '已全部计入（投降局保持排除）'), !fail);
+  await load();
+}
+if ($('#btnAllOn')) $('#btnAllOn').onclick = () => bulkExclude('on');
+if ($('#btnAllOff')) $('#btnAllOff').onclick = () => bulkExclude('off');
+
+/* 表头 sticky 的 top 要避开顶部导航条，高度实测后写进 --navh */
+function syncNavHeight() {
+  const nav = document.getElementById('dnav');
+  if (nav) document.documentElement.style.setProperty('--navh', nav.offsetHeight + 'px');
+}
+syncNavHeight();
+window.addEventListener('resize', syncNavHeight);
 
 load();
