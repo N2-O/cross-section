@@ -40,7 +40,9 @@ def _agg(rows) -> dict:
         rating_w += (x["rating"] or 0) * rd
         impact_w += (x["impact"] or 0) * rd
         r["played"] += 1
-        _w = x["wins"] or 0
+        _w = x.get("my_wins")
+        if _w is None:            # 只给 wins（A 队）的调用方：退回原口径
+            _w = x["wins"] or 0
         _t = x["rounds_total"] or 0
         if _t > 0 and _w * 2 > _t:
             r["wins"] += 1
@@ -110,16 +112,28 @@ def player_rows(conn: sqlite3.Connection, steamid: int,
     平均、走势、能力画像都走这个入口，所以一处过滤全局生效。
     """
     flt = "" if include_excluded else " AND (m.excluded IS NULL OR m.excluded=0)"
-    return [dict(r) for r in conn.execute(
+    rows = [dict(r) for r in conn.execute(
         """SELECT m.id AS match_id, m.map, m.played_at, m.platform, m.duration_s,
                   m.excluded, m.exclude_note,
                   p.*,
                   (SELECT COUNT(*) FROM rounds r WHERE r.match_id=m.id) rounds_total,
                   (SELECT SUM(a_win) FROM rounds r WHERE r.match_id=m.id) wins,
-                  (SELECT a_side FROM rounds r WHERE r.match_id=m.id ORDER BY round LIMIT 1) first_side
+                  (SELECT a_side FROM rounds r WHERE r.match_id=m.id ORDER BY round LIMIT 1) a_side_first,
+                  (SELECT first_side FROM players pl
+                    WHERE pl.match_id=m.id AND pl.steamid=p.steamid LIMIT 1) my_first_side
            FROM pms p JOIN matches m ON m.id=p.match_id
            WHERE p.steamid=?""" + flt + """
            ORDER BY m.played_at, m.id""", (steamid,))]
+    # a_win 记的是「A 队（上半场打 T 的那队）赢没赢」，与「我」无关。
+    # 我在 B 队时必须取反，否则整场比分/胜负会翻过来（实测 13 场里 6 场全反，
+    # 界面显示 4 胜 7 负 2 平，真实是 8 胜 3 负 2 平）。
+    for r in rows:
+        _tot = r["rounds_total"] or 0
+        _aw = r["wins"] or 0
+        _fs = (r.get("my_first_side") or "").upper()  # players.first_side：我的首回合阵营
+        _af = (r.get("a_side_first") or "").upper()   # rounds 首回合：A 队的首回合阵营
+        r["my_wins"] = (_tot - _aw) if (_fs and _af and _fs != _af) else _aw
+    return rows
 
 
 def overview(conn: sqlite3.Connection, steamid: int) -> dict:
@@ -145,9 +159,9 @@ def overview(conn: sqlite3.Connection, steamid: int) -> dict:
         "kills": r["kills"], "deaths": r["deaths"], "assists": r["assists"],
         "rounds": r["rounds"],
         "spent": r["spent"], "equip_value": r["equip_value"],
-        "win": 1 if (r["wins"] or 0) * 2 > (r["rounds_total"] or 0) > 0 else 0,
-        "draw": 1 if (r["rounds_total"] or 0) > 0 and (r["wins"] or 0) * 2 == (r["rounds_total"] or 0) else 0,
-        "score": f"{r['wins'] or 0}:{(r['rounds_total'] or 0) - (r['wins'] or 0)}",
+        "win": 1 if (r["my_wins"] or 0) * 2 > (r["rounds_total"] or 0) > 0 else 0,
+        "draw": 1 if (r["rounds_total"] or 0) > 0 and (r["my_wins"] or 0) * 2 == (r["rounds_total"] or 0) else 0,
+        "score": f"{r['my_wins'] or 0}:{(r['rounds_total'] or 0) - (r['my_wins'] or 0)}",
     } for r in rows]
 
     # 注意：pms.equip_value / equip_round_start 落库时已经是「人均」，

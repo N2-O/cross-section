@@ -1,5 +1,15 @@
 # Changelog
 
+## v6.3.2 — 2026-11-05
+
+**修概览页「比分 / 胜负 / 胜率」在 B 队场次整场翻转**：13 场口径里 6 场全反，界面显示 4 胜 7 负 2 平（36%），真实是 8 胜 3 负 2 平（73%）。
+
+- 根因：`rounds.a_win` 记的是「A 队（上半场打 T 的那队）赢没赢」，与「我」无关。`stats_api.player_rows` 直接 `SUM(a_win)` 当「我方胜场」，`_agg` 与 `timeline` 的 `win / draw / score` 全跟着它走 —— 我在 B 队（首回合 CT）的场次，比分和胜负都整场翻过来
+- 修法：`player_rows` 多取 `my_first_side`（players）与 `a_side_first`（rounds 首回合 `a_side`），两者不等时把 `wins` 换成本方回合数；下游 `_agg`、`timeline` 统一改用 `my_wins`。老库（`a_side` 还是「我方阵营」语义）判断天然恒等，口径不受影响
+- `export_csv.py` 的胜负列同一处 bug 一并修（它查了 `my_side` 却没用上，注释还留着「a_side 本身已经是每回合我方阵营」的过时说法）
+- 验证：拉线上 47 场库本地建临时库实测，6 场翻转（nuke / overpass / dust2 / inferno / dust2 / ancient），13 场从 4-7-2 变 8-3-2
+- 教训：`players.first_side` 和 `rounds.a_side` 是**两个不同的东西**（前者永远是我，后者是 A 队），代码里都用过 `first_side` 这个名字，`player_rows` 甚至只从 rounds 取了一个叫 `first_side` 的字段 —— 名字撞了才会漏
+
 ## v6.3.1 — 2026-10-27
 
 **修 v6.3.0 的致命回归：所有地图的回放都打不开**，页面报 `加载失败: AttributeError: 'Pandas' object has no attribute 'Z'`。

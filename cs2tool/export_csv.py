@@ -479,9 +479,9 @@ def build_csv(db_path: str, only_me: bool = False, match_ids: list[int] | None =
         ORDER BY x.match_id DESC, p.is_me DESC, x.adr DESC
     """, args).fetchall()
 
-    # 每场的我方胜负：直接用 a_win 求和。
-    # 不能写 WHERE a_side=my_side —— a_side 本身已经是「每回合我方阵营」，
-    # 换边后会翻，那样只统计到上半场（曾经把 13:9 的胜场记成负场）。
+    # 每场的我方胜负：a_win 是「A 队（上半场打 T 的那队）」的胜负，与「我」无关。
+    # 我在 A 队（首回合 T）直接取，在 B 队（首回合 CT）要取反——旧注释说的
+    # 「a_side 本身已经是每回合我方阵营」是过时的，照它写会把 B 队场次整场翻过来。
     side_win: dict[int, tuple[str, int | None]] = {}
     for mid in {r["match_id"] for r in rows}:
         m = conn.execute("""SELECT first_side AS side FROM players
@@ -489,12 +489,13 @@ def build_csv(db_path: str, only_me: bool = False, match_ids: list[int] | None =
         my_side = m["side"] if m else None
         win = None
         tot = conn.execute("SELECT COUNT(*) FROM rounds WHERE match_id=?", (mid,)).fetchone()[0]
-        w = conn.execute("SELECT COALESCE(SUM(a_win),0) FROM rounds WHERE match_id=?",
-                         (mid,)).fetchone()[0]
+        aw = conn.execute("SELECT COALESCE(SUM(a_win),0) FROM rounds WHERE match_id=?",
+                          (mid,)).fetchone()[0]
+        my_wins = (tot - aw) if (my_side or "").upper() == "CT" else aw
         if tot:
-            if w * 2 > tot:
+            if my_wins * 2 > tot:
                 win = 1
-            elif w * 2 < tot:
+            elif my_wins * 2 < tot:
                 win = 0
             else:
                 win = -1          # 平局：12:12 打满常规时间，或加时后平分
