@@ -16,6 +16,8 @@
 """
 from __future__ import annotations
 
+import json
+import os
 import re
 import sqlite3
 import time
@@ -197,6 +199,99 @@ def api_match_replay(conn, mid):
     return _ok({"note": "回放数据请用 /api/replay?match=<id>（非 v1，体积 5-6MB）"})
 
 
+# ---------------------------------------------------------------- frames
+
+#: 回放缓存目录（data/replays），由 server.py 启动时注入。
+#: 这里只读缓存，绝不解析 demo —— 一场 216MB 解析约 1.6s，内网连点就能把 CPU 打满。
+REPLAY_DIR = None
+
+#: rounddata.REPLAY_V=4 的 samples 字段顺序
+FRAME_COLUMNS = ["t", "x", "y", "yaw", "hp", "armor", "helmet", "balance",
+                 "flash", "weapon", "alive", "defuser", "z"]
+
+
+def set_replay_dir(path: str) -> None:
+    global REPLAY_DIR
+    REPLAY_DIR = path
+
+
+def _qfloat(qs, key, default):
+    v = (qs.get(key) or [""])[0]
+    if v == "":
+        return default
+    return float(v)
+
+
+def api_match_frames(conn, mid, qs):
+    """回放帧切片：?round=22&t=30.5&window=15&hz=4
+
+    返回该回合 t 秒前后 window 秒的帧，每帧按 FRAME_COLUMNS 排列。
+    时间基准=回合开始后的秒数（与网页回放时间轴一致）；不足 window 就截到
+    回合边界，不跨回合、不补空帧。hz 只能降采样（缓存本身约 4Hz）。
+    """
+    rows = _rows(conn, "SELECT id, map FROM matches WHERE id=?", (mid,))
+    if not rows:
+        return _err("match 不存在", 404)
+    try:
+        rnd = int(_qfloat(qs, "round", 0))
+        t = _qfloat(qs, "t", 0.0)
+        window = _qfloat(qs, "window", 15.0)
+        hz = int(_qfloat(qs, "hz", 4))
+    except ValueError:
+        return _err("参数必须是数字：round / t / window / hz")
+    if rnd <= 0:
+        return _err("缺少 round 参数（回合号，从 1 开始）")
+    if not REPLAY_DIR or not os.path.isdir(REPLAY_DIR):
+        return _err("回放缓存目录未就绪", 500)
+    rp = os.path.join(REPLAY_DIR, "%d.json" % mid)
+    if not os.path.isfile(rp):
+        return _err("这场还没有回放缓存（%d.json）：先在网页里打开一次回放生成" % mid, 404)
+    window = max(1.0, min(window, 60.0))
+    hz = max(1, min(hz, 64))
+    try:
+        with open(rp, encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        return _err("读回放缓存失败：%s" % e, 500)
+    rd = None
+    for r in data.get("rounds") or []:
+        if int(r.get("r") or 0) == rnd:
+            rd = r
+            break
+    if rd is None:
+        return _err("回合 %d 不在回放里（共 %d 回合）" % (rnd, len(data.get("rounds") or [])), 404)
+    lo, hi = max(0.0, t - window), t + window
+    step_t = 1.0 / hz
+    plist = []
+    t_max = 0.0
+    for p in rd.get("players") or []:
+        s = p.get("s") or []
+        if not s:
+            continue
+        t_max = max(t_max, s[-1][0])
+        frames, last_t = [], None
+        for fr in s:
+            tt = fr[0]
+            if tt < lo or tt > hi:
+                continue
+            if last_t is None or tt - last_t >= step_t - 1e-6:
+                frames.append(fr)
+                last_t = tt
+        if frames:
+            plist.append({"name": p.get("name"), "steamid": p.get("sid"),
+                          "side": p.get("side"), "is_me": bool(p.get("isMe")),
+                          "frames": frames})
+    # 老缓存的 samples 可能没有 z（REPLAY_V 旧版），列名按实际帧长度截取
+    cols = FRAME_COLUMNS[:len(plist[0]["frames"][0])] if plist else FRAME_COLUMNS
+    return _ok({
+        "match_id": mid, "map": rows[0].get("map"), "round": rnd,
+        "t": t, "window": window,
+        "t_from": round(lo, 2), "t_to": round(min(t_max, hi), 2),
+        "sample_hz": hz, "columns": cols,
+        "players": plist,
+    })
+
+
 # ---------------------------------------------------------------- players
 
 def api_players(conn, qs):
@@ -324,6 +419,7 @@ def api_index(conn):
             {"method": "GET", "path": "/api/v1/players/{steamid}/match-stats", "desc": "match_player_stats：逐场逐玩家数据"},
             {"method": "GET", "path": "/api/v1/players/{steamid}/trend", "desc": "能力快照序列"},
             {"method": "GET", "path": "/api/v1/matches/{id}/detail", "desc": "单场完整明细：每回合经济/玩家/全部击杀"},
+            {"method": "GET", "path": "/api/v1/matches/{id}/frames?round=&t=&window=15&hz=4", "desc": "回放帧切片：某回合 t 秒前后 window 秒（只读缓存）"},
         ],
         "examples": [
             "curl http://127.0.0.1:8790/api/v1/schema",
@@ -755,6 +851,7 @@ def doc_page() -> str:
         ("GET", "/api/v1/players/{steamid}/ability", "能力画像五维 + 趋势退步预警"),
         ("GET", "/api/v1/players/{steamid}/trend", "能力快照序列（趋势）"),
         ("GET", "/api/v1/matches/{id}/detail", "单场全明细：每回合经济 / 玩家 / 全部击杀"),
+        ("GET", "/api/v1/matches/{id}/frames?round=&t=&window=15&hz=4", "回放帧切片：某回合 t 秒前后 window 秒"),
     ]
     rows = "\n".join(
         f"<tr><td class='m'>{m}</td><td><code>{p}</code></td><td>{d}</td></tr>"
@@ -814,6 +911,7 @@ _ROUTES = [
     (r"^/api/v1/matches/(\d+)/rounds$", lambda c, q, g: api_match_rounds(c, int(g[0]))),
     (r"^/api/v1/matches/(\d+)/kills$", lambda c, q, g: api_match_kills(c, int(g[0]), q)),
     (r"^/api/v1/matches/(\d+)/replay$", lambda c, q, g: api_match_replay(c, int(g[0]))),
+    (r"^/api/v1/matches/(\d+)/frames$", lambda c, q, g: api_match_frames(c, int(g[0]), q)),
     (r"^/api/v1/players$", lambda c, q, g: api_players(c, q)),
     (r"^/api/v1/players/(\d+)/stats$", lambda c, q, g: api_player_stats(c, int(g[0]), q)),
     (r"^/api/v1/players/(\d+)/detail$", lambda c, q, g: api_player_detail(c, int(g[0]), q)),

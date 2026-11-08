@@ -1,5 +1,15 @@
 # Changelog
 
+## v6.3.5a — 2026-11-08
+
+**新端点 `GET /api/v1/matches/{id}/frames`**：按回合时间点取回放帧，给外部工具/AI 核对「谁在哪、动没动」，不用自己解 demo。
+
+- 用法：`?round=22&t=30.5&window=15&hz=4` —— 返回该回合 t 秒前后 window 秒，每人一列 `frames`，按 `columns` 顺序（t/x/y/yaw/hp/armor/helmet/balance/flash/weapon/alive/defuser[/z]）
+- 时间基准 = 回合开始后的秒数（与网页回放时间轴一致）；不足 window 就截到回合边界，不跨回合、不补空帧
+- **只读 `data/replays/<id>.json` 缓存，不解析 demo**：一场 216MB 解析约 1.6s，内网连点就能把 CPU 打满；没缓存返回 404，提示先在网页里打开一次回放生成
+- `hz` 只能降采样（缓存本身约 4Hz），`window` 上限 60s；老缓存的帧可能没有 z 列，`columns` 会按实际长度截取
+- `/api/v1` 与 `/api` 说明页的端点清单同步补上
+
 ## v6.3.5 — 2026-11-05
 
 **修「五杀」假数据**：多杀统计把 teamkill 也算进去，界面上凭空多出一个 5K+。

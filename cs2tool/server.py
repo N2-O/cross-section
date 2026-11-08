@@ -22,7 +22,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
 
-VERSION = "6.3.5"
+VERSION = "6.3.5a"
 # 开源发布仓库（检查新版本用）
 REPO_SLUG = "N2-O/cross-section"
 RELEASES_URL = f"https://github.com/{REPO_SLUG}/releases"
@@ -123,6 +123,8 @@ REPLAY_DIR = os.path.join(DATA_DIR, "replays")
 EXPORT_DIR = os.path.join(DATA_DIR, "exports")
 os.makedirs(EXPORT_DIR, exist_ok=True)
 os.makedirs(REPLAY_DIR, exist_ok=True)
+# 只读 API 的 frames 端点只读回放缓存（不解析 demo），目录由这里注入
+api_v1.set_replay_dir(REPLAY_DIR)
 MAPS_DIR = os.path.join(WEB_DIR, "maps")
 if not os.path.isdir(MAPS_DIR):
     MAPS_DIR = os.path.normpath(os.path.join(HERE, "..", "extract", "app", "_internal", "ui", "assets", "maps"))
