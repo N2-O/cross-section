@@ -1,5 +1,18 @@
 # Changelog
 
+## v6.3.5b — 2026-11-13
+
+**启动慢根治：解析链不再在启动路径上冷加载三次**（实测一次启动要 30 秒左右）
+
+- 根因：同一份 `awpy / polars / pandas / numpy / pyarrow / demoparser2` 在一次启动里被**真 import 三次**——`API.bat` 的 `[3/4]` 环境自检一次、`START.bat` 结尾又无条件验一次、`server.py` 顶部 `import awpy_ingest` → `from awpy import Demo` 再第三次。Windows 上每次冷加载这堆原生 DLL 要 5~10 秒，叠加就是半分钟；「越来越慢」是因为解析链里的包随版本累积，三处各自变贵
+- 改法 ①：`server.py` 的 `import awpy_ingest` 改惰性（`_awpy_ingest()`），只在真正解析 demo 那一刻才导 —— 不解析就完全不加载
+- 改法 ②：`START.bat` / `API.bat` 的环境自检从「真 import」换成 `find_spec`（只查文件不加载，7 个模块 <0.3 s），且不再重复验；只有**补装过之后**才真 import 验一次，用来发现 `find_spec` 看不见的 DLL 损坏
+- 顺带：`API.bat` 里两次 PowerShell（`Get-CimInstance` 扫旧进程、`Get-NetIPAddress` 列地址）和 `timeout /t 1` 全删 —— 端口被占由 `server.py` 自己 `netstat + taskkill` 后重试；内网地址改由 `server.py` 用 socket 打印，并且滤掉 169.254.* 的 APIPA 地址（他机器上有七八个虚拟网卡，以前那串地址一半连不上）
+- 顺手补的坑（删掉 API.bat 的预杀进程后才暴露）：**Windows 上端口被占时 bind 会「假成功」**。Windows 的 `SO_REUSEADDR` 允许两个 socket 绑同一端口，于是旧实例还活着时新实例也能 bind，两个服务同时监听、请求随机落到旧进程——实测表现是「新实例起来了，但 `/api/v1/health` 还是旧服务的 404」。`server.py` 改用 `SO_EXCLUSIVEADDRUSE`（仅 Windows，POSIX 保持 REUSEADDR 免等 TIME_WAIT），bind 老实报错后由 `_kill_port_owner` 杀掉旧进程重试
+- 修补丁：**批处理里不能写中文注释**。第一版发出去的 `API.bat` 在真机 cmd（936 码页）下把一行 UTF-8 中文注释切出半截当命令执行，打印 `'…' 不是内部或外部命令`。文件字节本身没坏（UTF-8 + CRLF、74 行无裸 LF），纯粹是 cmd 按 ANSI 码页解析非 ASCII 导致的。现 `API.bat` / `START.bat` 全部注释改 ASCII，中文说明只留在 CHANGELOG。已在真机上用「改端口副本」跑通：`[1/3] → [3/3]` 无报错，8794 起服务、`/api/v1/health` 正常返回
+- 验证（在他那台 Windows 上实跑，临时 data/demos 目录 + 8893 端口，不碰 8790 实例）：假占用者绑住 `0.0.0.0:8893` → 新实例打印「停止占用 8893 端口的旧进程 PID=…」→ 等待 2 s → 起来，health **2.54 s**（含那 2 秒）；空端口启动 health **0.63 s**；LAN banner 打出 `10.208.123.22` / `10.147.20.201` 两条可用地址，169.254.* 已被滤掉
+- 验证：在一台**没装 awpy** 的机器上，改前 `server.py` 直接 `ModuleNotFoundError: awpy` 退出；改后正常起，进程起到 `/api/v1/health` 可响应 **0.22 s**
+
 ## v6.3.5a — 2026-11-08
 
 **新端点 `GET /api/v1/matches/{id}/frames`**：按回合时间点取回放帧，给外部工具/AI 核对「谁在哪、动没动」，不用自己解 demo。

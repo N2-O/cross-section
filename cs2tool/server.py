@@ -22,7 +22,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
 
-VERSION = "6.3.5a"
+VERSION = "6.3.5b"
 # 开源发布仓库（检查新版本用）
 REPO_SLUG = "N2-O/cross-section"
 RELEASES_URL = f"https://github.com/{REPO_SLUG}/releases"
@@ -39,8 +39,18 @@ import settings as S  # noqa: E402
 import rounddata  # noqa: E402
 import ability    # noqa: E402
 import api_v1     # noqa: E402
-import awpy_ingest  # noqa: E402
 import metrics as metricsmod  # noqa: E402
+
+
+def _awpy_ingest():
+    """惰性导入解析层（awpy → polars / numpy / pandas）。
+
+    Windows 上第一次冷加载这套原生 DLL 要 5~10 秒，而启动时根本用不到它
+    （只有真正解析 demo 才用）。放在模块顶层 = 每开一次程序白等一次，
+    所以挪到要用的时候再导。
+    """
+    import awpy_ingest
+    return awpy_ingest
 
 if getattr(sys, "frozen", False):
     BASE = os.path.dirname(sys.executable)     # 打包后：exe 所在目录
@@ -820,7 +830,7 @@ def api_analyze(names: list[str], force: bool = False):
                     # 「正在采样位置快照」这类人话，而不是干等一个不动的小时不动的条
                     _jobs["started_at"] = time.time()
                     _jobs["stage"] = "读取 demo"
-                    mid = awpy_ingest.ingest_awpy(
+                    mid = _awpy_ingest().ingest_awpy(
                         ws, path, me, force=force,
                         log=lambda *a: _jobs.update(
                             stage=" ".join(str(x) for x in a).strip()))
@@ -1380,6 +1390,39 @@ def free_port(start=8765):
     return 8765
 
 
+def _lan_urls(port: int) -> list[str]:
+    """本机可被别的机器访问到的 IPv4 健康检查地址。
+
+    以前这段是 API.bat 里一句 PowerShell `Get-NetIPAddress`，要 1~2 秒；
+    现在在 Python 里顺手拿，顺带把 169.254.*（自动分配的 APIPA 地址，
+    他机器上有七八个虚拟网卡）滤掉 —— 那些地址谁也连不上，只会刷屏。
+    """
+    ips: list[str] = []
+
+    def _add(ip) -> None:
+        ip = str(ip or "").strip()
+        if not ip or ip in ips:
+            return
+        if ip.startswith(("127.", "169.254.")) or ip == HOST:
+            return
+        ips.append(ip)
+
+    # 默认路由出口：UDP connect 不发包，只让系统挑一块网卡出来
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("10.255.255.255", 1))
+            _add(s.getsockname()[0])
+    except OSError:
+        pass
+    # 其余网卡
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            _add(info[4][0])
+    except OSError:
+        pass
+    return ["http://%s:%d/api/v1/health" % (ip, port) for ip in ips]
+
+
 def _kill_port_owner(port: int) -> bool:
     """Windows: 杀掉占用指定端口的进程（旧实例）。返回是否动了手。"""
     if os.name != "nt":
@@ -1454,6 +1497,30 @@ def _auto_pull_loop():
             _t.sleep(1800)
 
 
+class _LanServer(ThreadingHTTPServer):
+    """Windows 上必须独占端口，否则旧实例不会被顶掉。
+
+    Windows 的 SO_REUSEADDR 语义跟 POSIX 不一样：它允许第二个 socket 绑同一个
+    地址，谁收到连接全看运气。实测症状——旧实例还在跑时，新实例 bind 也「成功」，
+    于是两个服务同时监听，页面/接口随机落到旧代码上（表现为新实例起来了但
+    /api/v1/health 还是旧的 404）。
+    用 SO_EXCLUSIVEADDRUSE 让 bind 老实报 EADDRINUSE，再交给 _kill_port_owner
+    杀掉旧进程重试。POSIX 上保持原来的 SO_REUSEADDR（不然重启要等 TIME_WAIT）。
+    """
+
+    daemon_threads = True
+    if os.name == "nt":
+        allow_reuse_address = False
+
+    def server_bind(self):
+        if os.name == "nt" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            try:
+                self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            except OSError:
+                pass
+        super().server_bind()
+
+
 def main():
     # 解析层依赖 awpy（内部用 polars），不再需要 pandas / demoparser2 版本自检
 
@@ -1467,7 +1534,7 @@ def main():
     srv = None
     for attempt in (1, 2):
         try:
-            srv = ThreadingHTTPServer((HOST, port), Handler)
+            srv = _LanServer((HOST, port), Handler)
             break
         except OSError as e:
             if attempt == 1 and _kill_port_owner(port):
@@ -1500,6 +1567,19 @@ def main():
         traceback.print_exc()
 
     print(f"Cross-Section v{VERSION} 已启动: {url}")
+    # 监听 0.0.0.0 时把可用的内网地址列出来（原先由 API.bat 用 PowerShell 打，
+    # 那是又慢又不准：多网卡时还会把一堆连不上的 169.254 地址刷上来）
+    if HOST in ("0.0.0.0", "", "::"):
+        print("")
+        print("   ============================================================")
+        print(f"   LAN API mode   port {port}   listening on 0.0.0.0")
+        print("   reachable at:")
+        for _u in _lan_urls(port):
+            print("     " + _u)
+        print("")
+        print("   close this window to stop the server")
+        print("   ============================================================")
+        print("")
     # 版本检查挪到启动时后台跑：页面打开时只读缓存，不再等网络
     _update_check_spawn()
     threading.Thread(target=_auto_pull_loop, daemon=True).start()
