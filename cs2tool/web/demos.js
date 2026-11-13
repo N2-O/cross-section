@@ -194,13 +194,15 @@ function renderGames() {
         return `<span class="lamps" title="左=原始文件　右=解析结果">${fileDot}${parseDot}</span>`;
     } },
     { t: '地图', get: r => `<div class="gmap" title="${esc(r.name)}">
-        <div class="mn">${esc(r.map ? mapCn(r.map) : '—')}</div>
+        <div class="mn">${esc(r.map ? mapCn(r.map) : '—')}${r.surrendered
+          ? '<span class="tag surr" title="这局有整场投降（回合 reason 带 surrender）——默认不计入统计，「全选」也不会把它勾回来">投降</span>'
+          : ''}</div>
         <div class="fs">${r.size ? (r.size / 1048576).toFixed(0) + ' MB' : ''}</div>
       </div>` },
     { t: '开始时间', title: 'demo 文件名里的 Steam 比赛 id 右移 31 位 = 比赛「结束」时刻，减去这场比赛的实际时长就是「开始」时刻（和 Steam 比赛历史页对齐，实测差不到 1 分钟）',
       get: r => `<span class="m">${esc((r.played_at || r.mtime || '').slice(5, 16))}</span>` },
     { t: '比分', num: 1, get: scoreOf },
-    { t: '计入', title: '投降、摆烂、半路不打了的局在这里取消勾选——数据留在库里，但默认不参与平均、走势和能力画像。投降局在解析时已自动取消勾选',
+    { t: '计入', title: '投降、摆烂、半路不打了的局在这里取消勾选——数据留在库里，但默认不参与平均、走势和能力画像。带「投降」标记的局自动排除，「全选」不会把它们勾回来',
       get: r => (r.match_id
         ? `<label class="sw" title="${esc(r.exclude_note
               ? '已排除：' + r.exclude_note + '（勾上就恢复计入）'
@@ -538,7 +540,9 @@ document.addEventListener('change', async (e) => {
 async function bulkExclude(mode) {
   const list = (S.demos || []).filter(d => d.match_id);
   if (!list.length) return;
-  const isSurrender = d => /投降/.test(String(d.exclude_note || ''));
+  /* 投降判据走后端派生的 d.surrendered（由 rounds.reason 得出）；
+     exclude_note 只作老载荷的兜底 —— 它会被「全选」之类不带 note 的写入清空。 */
+  const isSurrender = d => !!(d.surrendered) || /投降/.test(String(d.exclude_note || ''));
   const jobs = list.map(d => ({
     match_id: d.match_id,
     excluded: mode === 'off' ? 1 : (isSurrender(d) ? 1 : 0),

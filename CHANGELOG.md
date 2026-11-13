@@ -1,5 +1,20 @@
 # Changelog
 
+## v6.3.5c — 2026-11-14
+
+**修「投降局没有标记、全选又把它算回来」**
+
+- 根因：投降的判据是 `matches.exclude_note` 里那两个字，而 `/api/set_excluded` 每次都写
+  `exclude_note = note or None`——勾选框和「全选 / 全不选」都不带 note，于是**每点一次批量操作就把标记抹成 NULL**。
+  标记一没，「全选」里的 `isSurrender()` 就再也认不出来，投降局被当成正常局算回平均（他那 4 场投降就是这么丢的）
+- 改法 ①：`store2.list_demos` 由 `rounds.reason LIKE '%surrender%'` **直接派生 `surrendered`**，不再以可被清空的字符串为准；
+  `/api/v1/matches` 同步带 `surrendered` 与 `excluded`，外部工具也能看到
+- 改法 ②：`/api/set_excluded` 没传 note 就只改 `excluded`，不碰 note
+- 改法 ③：demos 页地图名后面加「投降」小标签（悬停有说明），「全选」判据改用 `d.surrendered`，老载荷仍回退看 note
+- 验证：内存库单测（1 场 `ct_surrender` + 1 场正常）→ `surrendered` 分别 1 / 0；`relink_demos` 回填把投降局设成
+  `excluded=1` + 「投降（历史回填）」，正常局不动；`/api/state` 与 `/api/v1/matches` 字段都正确
+- 他库里现有 4 场整场投降（match 7 / 9 / 26 / 52，reason `ct_surrender` / `terrorists_surrender`），重启后自动标回「不计入」
+
 ## v6.3.5b — 2026-11-13
 
 **启动慢根治：解析链不再在启动路径上冷加载三次**（实测一次启动要 30 秒左右）

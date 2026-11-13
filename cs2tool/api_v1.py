@@ -136,8 +136,11 @@ def api_matches(conn, qs):
     limit = int((qs.get("limit") or ["100"])[0])
     mapf = (qs.get("map") or [""])[0]
     sql = """SELECT m.id, m.map, m.played_at, m.duration_s, m.server, m.platform,
+                    m.excluded,
                     (SELECT COUNT(*) FROM rounds r WHERE r.match_id=m.id) rounds,
-                    (SELECT COUNT(*) FROM kills k WHERE k.match_id=m.id) kills
+                    (SELECT COUNT(*) FROM kills k WHERE k.match_id=m.id) kills,
+                    (SELECT COUNT(*) FROM rounds r2 WHERE r2.match_id=m.id
+                       AND LOWER(COALESCE(r2.reason,'')) LIKE '%surrender%') surrender_rounds
              FROM matches m"""
     args = []
     if mapf:
@@ -145,7 +148,10 @@ def api_matches(conn, qs):
         args.append(mapf)
     sql += " ORDER BY m.played_at DESC, m.id DESC LIMIT ?"
     args.append(max(1, min(limit, 500)))
-    return _ok(_rows(conn, sql, args))
+    out = _rows(conn, sql, args)
+    for r in out:
+        r["surrendered"] = 1 if (r.pop("surrender_rounds", 0) or 0) else 0
+    return _ok(out)
 
 
 def api_match(conn, mid):

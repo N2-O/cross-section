@@ -22,7 +22,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
 
-VERSION = "6.3.5b"
+VERSION = "6.3.5c"
 # 开源发布仓库（检查新版本用）
 REPO_SLUG = "N2-O/cross-section"
 RELEASES_URL = f"https://github.com/{REPO_SLUG}/releases"
@@ -1300,13 +1300,21 @@ class Handler(BaseHTTPRequestHandler):
                 # 数据留在库里，只是默认不参与平均/走势/能力画像。
                 mid = int(payload.get("match_id") or 0)
                 on = 1 if payload.get("excluded") else 0
+                # note 只在真的传了的时候才写：勾选框和「全选/全不选」都不带 note，
+                # 以前这里无脑写成 NULL，把投降局的标记一起抹了 —— 之后「全选」就再也
+                # 认不出哪几场是投降（判据就是这条 note），于是把投降局也算回平均里。
+                given = "note" in payload
                 note = str(payload.get("note") or "").strip()[:120]
                 if not mid:
                     return self._send(*_json({"ok": False, "error": "缺 match_id"}, 400))
                 with _lock:
-                    cur = _conn.execute(
-                        "UPDATE matches SET excluded=?, exclude_note=? WHERE id=?",
-                        (on, note or None, mid))
+                    if given:
+                        cur = _conn.execute(
+                            "UPDATE matches SET excluded=?, exclude_note=? WHERE id=?",
+                            (on, note or None, mid))
+                    else:
+                        cur = _conn.execute(
+                            "UPDATE matches SET excluded=? WHERE id=?", (on, mid))
                     _conn.commit()
                 if not cur.rowcount:
                     return self._send(*_json({"ok": False, "error": "match 不存在"}, 404))

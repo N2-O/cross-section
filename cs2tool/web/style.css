@@ -641,3 +641,8 @@ body.nott [data-m]{border-bottom:0;cursor:auto}
 .jbtxt{flex:0 0 auto;font-variant-numeric:tabular-nums;color:var(--dim)}
 .jbname{flex:0 1 auto;min-width:0;max-width:14em;opacity:.62;overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap}
+
+/* 投降标记：地图名后面那个小标签 */
+.tag.surr{display:inline-block;margin-left:6px;padding:0 5px;border-radius:4px;
+  font-size:10px;line-height:15px;vertical-align:1px;letter-spacing:.02em;
+  color:#f0c674;background:rgba(240,198,116,.12);border:1px solid rgba(240,198,116,.28)}

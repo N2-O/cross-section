@@ -495,6 +495,9 @@ def list_demos(conn: sqlite3.Connection, my_steamid: int | None = None) -> list[
                       AND pl.steamid=COALESCE(:sid, m.my_steamid)) AS my_side,
                   (SELECT COUNT(*) FROM pms p2 WHERE p2.match_id=d.match_id
                       AND p2.steamid=COALESCE(:sid, m.my_steamid)) AS me_in,
+                  -- 投降局：从事件流认，不再依赖 exclude_note 这个可以被「全选」清空的字符串
+                  (SELECT COUNT(*) FROM rounds r3 WHERE r3.match_id=d.match_id
+                      AND LOWER(COALESCE(r3.reason,'')) LIKE '%surrender%') AS surrender_rounds,
                   p.kills AS me_kills, p.deaths AS me_deaths, p.assists AS me_assists,
                   p.adr AS me_adr, p.kast AS me_kast, p.rating AS me_rating,
                   p.hs AS me_hs, p.fk AS me_fk, p.impact AS me_impact,
@@ -511,6 +514,7 @@ def list_demos(conn: sqlite3.Connection, my_steamid: int | None = None) -> list[
     out = []
     for r in rows:
         d = dict(r)
+        d["surrendered"] = 1 if (d.pop("surrender_rounds", 0) or 0) else 0
         d["map"] = d.get("m_map") or d.get("map")
         d["platform"] = d.get("m_platform") or d.get("platform")
         # 分阵营 ADR（前端直接可用）
