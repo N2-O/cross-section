@@ -826,6 +826,8 @@ thead th,tr.tm td,#zoomTip,.legend{font-size:var(--t1)!important}
 <script>
 const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
 const bg=new Image();
+/* 底图「微微自发光」：底图 + 一圈极淡的外发光 + 只压在不透明像素上的内光，
+   按图片 src 预合成并缓存（每张只做一次，之后每帧还是一张 drawImage）。 */
 let D=null,R=null,cur=0,now=0,playing=false,raf=null,half=12;
 /* Z 轴分层：LAYERS 来自数据（多层图才有），bgLayerSeen 记录当前 bg 装的是哪一层，
    trackName = 「正在追的人」，主画布跟着他上下楼 */
@@ -1335,6 +1337,38 @@ function ensureBg(li){
   bgLayerSeen=li;
   bg.src=mapImage(li);
 }
+/* 预合成「自发光底图」：外发光一圈 + 本体 + 只压在不透明像素上的内光。
+   纯黑区（古堡那种「头顶有盖」的地块）会被抬到接近页面底色的深灰，
+   不再像一块和画布外一样黑透的洞。按 src 缓存，最多留 4 张（每张 1024² 画布 4 MB）。 */
+const glowCache=new Map();
+function glowOf(im){
+  if(!im||!im.complete||!im.naturalWidth)return null;
+  const key=im.src;
+  const hit=glowCache.get(key);
+  if(hit)return hit;
+  const c=document.createElement('canvas');
+  c.width=c.height=1024;
+  const x=c.getContext('2d');
+  x.shadowColor='rgba(170,190,225,.14)';
+  x.shadowBlur=24;
+  x.drawImage(im,0,0,1024,1024);        /* 这一遍只为拿到外发光 */
+  x.shadowColor='transparent';
+  x.shadowBlur=0;
+  x.drawImage(im,0,0,1024,1024);
+  x.globalCompositeOperation='source-atop';   /* 只作用在底图不透明处 */
+  x.fillStyle='rgba(150,164,192,.025)';
+  x.fillRect(0,0,1024,1024);
+  const g=x.createRadialGradient(470,430,60,512,500,830);
+  g.addColorStop(0,'rgba(206,220,248,.055)');
+  g.addColorStop(.6,'rgba(196,210,240,.025)');
+  g.addColorStop(1,'rgba(190,205,235,0)');
+  x.fillStyle=g;
+  x.fillRect(0,0,1024,1024);
+  x.globalCompositeOperation='source-over';
+  if(glowCache.size>=4)glowCache.delete(glowCache.keys().next().value);
+  glowCache.set(key,c);
+  return c;
+}
 function otherLayerBg(li){
   if(!ibg[li]){
     const im=new Image();
@@ -1361,7 +1395,7 @@ function drawInset(mainL){
   ictx.clearRect(0,0,1024,1024);
   ictx.fillStyle='#0a0a0b';ictx.fillRect(0,0,1024,1024);
   const im=otherLayerBg(oL);
-  if(im.complete)ictx.drawImage(im,0,0,1024,1024);
+  if(im.complete)ictx.drawImage(glowOf(im)||im,0,0,1024,1024);
   /* 小窗只有主画的 ~1/5，点与字号都要按 1024 画布放大，否则缩下去看不见 */
   for(const p of list){
     const s=at(p,now);
@@ -1384,7 +1418,7 @@ function draw(){
   const L=mainLayer();
   ensureBg(L);
   ctx.setTransform(view.s,0,0,view.s,view.x,view.y);
-  if(bg.complete)ctx.drawImage(bg,0,0,1024,1024);
+  if(bg.complete)ctx.drawImage(glowOf(bg)||bg,0,0,1024,1024);
   const r=R[cur];
   const onL=s=>!hasLayers()||s==null||s.z==null||layerOf(s.z)===L;
   /* 没有实体坐标的东西（C4/道具落点）用它自己的 Z；拿不到就当上层 */
@@ -2141,7 +2175,7 @@ document.addEventListener('keydown',e=>{
       p.pcolor=PERS[(p.mine?0:5)+Math.max(0,i)];
     });
   });
-  bg.onload=()=>draw();          /* 地图异步加载完成后再画一次 */
+  bg.onload=()=>draw();          /* 地图异步加载完成后再画一次（自发光在图源里按需合成） */
   bg.onerror=()=>{console.warn('地图底图加载失败:',bg.src);draw();};
   bgLayerSeen=0;bg.src=mapImage(0);
   $('#loading').remove();
