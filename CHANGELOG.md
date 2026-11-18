@@ -1,5 +1,31 @@
 # Changelog
 
+## v6.3.6 — 2026-11-18
+
+**古堡激战（de_cbble）回到 CS2：把它的雷达参数与底图塞进默认包体**
+
+- 触发：2026-11-18 22:38 的 CS2 更新后，`pak01_dir.vpk` 里 `resource/overviews/` 从 23 个变成 **24 个**——
+  多出来的正是 `de_cbble.txt`（`pak01_036.vpk` 同时被改写）。包里此前只有「de_cbble → 古堡激战」这个名字映射，
+  参数和底图都没有，所以一进古堡的 demo 会先在 `rounddata.read_overview()` 报「缺少地图 de_cbble 的雷达参数」，
+  把 txt 补上之后容器里也取不到底图（console 一句「地图底图加载失败」，画布空白）
+- 加 `cs2tool/overviews/de_cbble.txt`：用 `tools/extract_radar.py` 从 VPK 里原样取出。
+  `pos_x = −3615` / `pos_y = 2712` / `scale = 4.724792`；**单层图**（没有 `verticalsections`），所以不需要 `_lower` 那张
+- 加 `cs2tool/web/maps/de_cbble.png`：从 `panorama/images/overheadmaps/de_cbble_radar_psd.vtex_c` 解出来
+  （资源头 → `DATA` 块 → VTEX 头 1024² / BGRA8888 → LZ4 块压缩的单个 mip）。`extract_radar.py` 现在顺手把这件事也做了：
+  除了 `overviews/` 再输出一个 `maps/`，一条命令可以从游戏目录重建整套地图素材
+- 名字映射不用动：`app.js` / `demos.js` 的 `MAP_CN` 里 `de_cbble: '古堡激战'` 本来就有
+- 验证（不是「看着像」）：
+  - 同一条解码链跑 `de_mirage_radar_psd.vtex_c`，与包里现有的 `de_mirage.png`（来自 awpy-data 的 `images.zip`）
+    **逐像素相同，max diff = 0** —— 说明新图和旧 20 张同源同风格，不是又混进来一套
+  - 底图与参数自洽：把 txt 里的 `CTSpawn` / `TSpawn` / `bombA` / `bombB` 归一化坐标打在图上，
+    四点处 alpha 全 ≥ 254（mirage / dust2 / inferno 同样口径都是 255）→ 图与 `pos/scale` 配的是同一张地图
+  - `awpy-data` 最新 release（`2000946`，2026-11-18 08:36Z）的 `map_data.json` 里 `de_cbble` 与游戏 txt 三项完全一致
+    （−3615 / 2712 / 4.724792），但它家的 `images.zip` 这版**还没带古堡底图**，所以这张只能自己从游戏资源解
+- 边界：雷达 vtex 里有 4 张是 BC7/DXT5（`ar_shoots` / `ar_shoots_night` / `cs_italy` / `workshop_preview`），
+  脚本会打印「不是 BGRA8888」直接跳过——这 4 张包里本来就有 awpy 的图，不影响；将来真出了 BC7 格式的新图，
+  得另外加 BC7 解码。已有的 20 张这次一张没动
+- 体积：整包 +2 个文件 / +177 KB，代码只动了 `VERSION`
+
 ## v6.3.5c — 2026-11-14
 
 **修「投降局没有标记、全选又把它算回来」**
